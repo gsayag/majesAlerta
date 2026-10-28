@@ -19,7 +19,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 from analytics import (BOUNDS, CENTER, TYPES, STATUSES, VALUE_BANDS, now, parse_time, statistics, priority,
                        duplicate_candidates, harm, critical_reasons)
 from insights import enhanced_statistics, management_metrics
+from legal import LEGAL_CLASSES, FAMILIES, FORCES, CIRCUMSTANCES, classify, family as legal_family
 from evaluation import evaluate
+from ai_analysis import ai_available, analyze
 from store import init_db, all_reports, create_report, update_status, track, connect
 
 ROOT = Path(__file__).resolve().parent
@@ -58,7 +60,14 @@ def validate_report(data):
         raise ValueError('Los indicadores de arma y lesión deben ser sí o no.')
     value = data.get('value_band', 'sin_dato')
     if value not in VALUE_BANDS:
-        raise ValueError('Selecciona un rango válido para el valor de lo robado.')
+        raise ValueError('Selecciona un rango válido para el valor de lo sustraído.')
+    force = data.get('force', 'sin_dato')
+    if force not in FORCES:
+        raise ValueError('Indica si hubo violencia o amenaza.')
+    facts = data.get('circumstances', [])
+    # 'organizacion' solo lo determina la revisión, no quien reporta.
+    if not isinstance(facts, list) or any(f not in CIRCUMSTANCES or f == 'organizacion' for f in facts):
+        raise ValueError('Circunstancias no válidas.')
     evidence = None
     if data.get('photo'):
         try:
@@ -68,7 +77,8 @@ def validate_report(data):
         if len(evidence) > 1000000 or not evidence.startswith(b'\xff\xd8\xff') or not evidence.endswith(b'\xff\xd9'):
             raise ValueError('Solo se admite una imagen JPEG de hasta 1 MB.')
     return dict(subtype=subtype, description=description.strip(), occurred_at=event.isoformat(),
-                lat=lat, lng=lng, weapon=data['weapon'], injury=data['injury'], value_band=value, evidence=evidence)
+                lat=lat, lng=lng, weapon=data['weapon'], injury=data['injury'], value_band=value,
+                force=force, circumstances=sorted(set(facts)), evidence=evidence)
 
 
 class AppServer(ThreadingHTTPServer):
@@ -153,6 +163,18 @@ class Handler(BaseHTTPRequestHandler):
             raise APIError(400, 'Filtro no válido.')
         return days, subtype, band
 
+    def family_filter(self, query):
+        value = query.get('family', ['all'])[0]
+        if value not in {'all', *FAMILIES}:
+            raise APIError(400, 'Filtro no válido.')
+        return value
+
+    def reports(self, query):
+        """Reportes de la base, filtrados por familia (hurtos/robos) si se pidió."""
+        rows = all_reports(self.server.db)
+        fam = self.family_filter(query)
+        return rows if fam == 'all' else [r for r in rows if legal_family(r) == fam]
+
     def do_HEAD(self):
         self.do_GET()
 
@@ -161,11 +183,13 @@ class Handler(BaseHTTPRequestHandler):
             url = urlparse(self.path)
             path, query = url.path, parse_qs(url.query)
             if path == '/api/config':
-                return self.respond(200, {'bounds': BOUNDS, 'center': CENTER, 'types': TYPES, 'statuses': STATUSES, 'value_bands': VALUE_BANDS, 'now': now().isoformat(), 'demo': True, 'google_maps_api_key': self.server.maps_key, 'map_provider': 'google' if self.server.maps_key else 'local', 'version': '2.0'})
+                return self.respond(200, {'bounds': BOUNDS, 'center': CENTER, 'types': TYPES, 'statuses': STATUSES, 'value_bands': VALUE_BANDS,
+                                          'legal_classes': LEGAL_CLASSES, 'families': FAMILIES, 'forces': FORCES,
+                                          'circumstances': CIRCUMSTANCES, 'ai_available': ai_available(), 'now': now().isoformat(), 'demo': True, 'google_maps_api_key': self.server.maps_key, 'map_provider': 'google' if self.server.maps_key else 'local', 'version': '2.0'})
             if path == '/api/health':
                 return self.respond(200, {'ok': True, 'mode': 'local-demo'})
             if path in {'/api/stats', '/api/export.csv'}:
-                result = enhanced_statistics(all_reports(self.server.db), *self.filters(query))
+                result = enhanced_statistics(self.reports(query), *self.filters(query))
                 if path.endswith('.csv'):
                     stream = io.StringIO(newline='')
                     writer = csv.writer(stream)
@@ -187,7 +211,7 @@ class Handler(BaseHTTPRequestHandler):
                     with connect(self.server.db) as con:
                         histories = [dict(h) for h in con.execute('SELECT report_id,status,timestamp FROM history')]
                         evidence = {r[0] for r in con.execute('SELECT report_id FROM evidence')}
-                    result = management_metrics(all_reports(self.server.db), histories, evidence, *self.filters(query))
+                    result = management_metrics(self.reports(query), histories, evidence, *self.filters(query))
                     return self.respond(200, result)
                 if path == '/api/admin/session':
                     return self.respond(200, {'authenticated': True})
@@ -197,7 +221,7 @@ class Handler(BaseHTTPRequestHandler):
                         photo_ids = {row[0] for row in con.execute('SELECT report_id FROM evidence')}
                     reports = [{**{k: v for k, v in r.items() if k != 'tracking'},
                                 'priority': priority(r, rows), 'candidates': duplicate_candidates(r, rows),
-                                'harm': harm(r), 'critical': critical_reasons(r),
+                                'harm': harm(r), 'critical': critical_reasons(r), 'legal': classify(r),
                                 'has_evidence': r['id'] in photo_ids} for r in rows]
                     return self.respond(200, {'reports': reports})
                 if path.startswith('/api/admin/evidence/'):
@@ -209,7 +233,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise APIError(404, 'No hay imagen para este reporte.')
             if path.startswith('/api/'):
                 raise APIError(404, 'Ruta no encontrada.')
-            routes = {'/', '/reportar', '/panel', '/gestion', '/seguimiento', '/gestion-datos', '/laboratorio', '/metodologia'}
+            routes = {'/', '/reportar', '/panel', '/gestion', '/seguimiento', '/gestion-datos', '/analisis', '/laboratorio', '/metodologia'}
             file = WEB / ('index.html' if path in routes else unquote(path).lstrip('/'))
             file = file.resolve()
             if WEB not in file.parents or not file.is_file():
@@ -255,9 +279,19 @@ class Handler(BaseHTTPRequestHandler):
                 if token:
                     self.server.sessions.pop(token, None)
                 return self.respond(200, {'ok': True}, headers={'Set-Cookie': 'majes_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'})
+            if path == '/api/admin/ai-analysis':
+                self.require_admin()
+                query = {k: [str(data[k])] for k in ('days', 'subtype', 'band', 'family') if k in data}
+                days, subtype, band = self.filters(query)
+                fam = self.family_filter(query)
+                result = analyze(self.reports(query), days, subtype, band, fam, refresh=data.get('refresh') is True)
+                return self.respond(200, result)
             if path == '/api/admin/status':
                 self.require_admin()
                 rid, status, note = data.get('id'), data.get('status'), data.get('note', '')
+                legal_class = data.get('legal_class') or None
+                if legal_class is not None and legal_class not in LEGAL_CLASSES:
+                    raise ValueError('Figura legal no válida.')
                 original = data.get('duplicate_of') if status == 'duplicado' else None
                 if not isinstance(rid, str) or status not in STATUSES:
                     raise ValueError('Reporte o estado no válido.')
@@ -265,7 +299,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError('Escribe una nota de revisión de 6 a 400 caracteres.')
                 if status == 'duplicado' and not isinstance(original, str):
                     raise ValueError('Indica el identificador del reporte original.')
-                update_status(self.server.db, rid, status, note.strip(), original)
+                update_status(self.server.db, rid, status, note.strip(), original, legal_class)
                 return self.respond(200, {'ok': True})
             raise APIError(404, 'Ruta no encontrada.')
         except APIError as e:

@@ -4,9 +4,10 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from statistics import median
 from time import perf_counter
-from analytics import (BOUNDS, TYPES, STATUSES, VALID_STATUSES, VALUE_BANDS, HARM_VALUE, HARM_WEAPON,
+from analytics import (BOUNDS, TYPES, STATUSES, VALID_STATUSES, VALUE_BANDS, HARM_VALUE, HARM_WEAPON, HARM_FORCE,
                        HARM_INJURY, CRITICAL_HARM, now, parse_time, selected, statistics, dbscan, priority,
                        harm, critical_reasons, value_band)
+from legal import classify, distribution
 
 STEP = .006
 # Daño acumulado de una celda para pedir atención. 6 = un robo grave o seis robos menores.
@@ -82,6 +83,7 @@ def enhanced_statistics(rows, days=30, subtype='all', band='all', clock=None):
                          'first_date': min(parse_time(r['occurred_at']).date().isoformat() for r in items),
                          'last_date': max(parse_time(r['occurred_at']).date().isoformat() for r in items)})
     s.update({'matrix': matrix, 'modalities': modalities(current), 'recurrence': recurrence,
+              'legal': distribution(current),
               'cluster_details': clusters, 'difference': s['total']-s['previous_total'],
               'period': {'start': start.isoformat(), 'end': clock.date().isoformat(),
                          'previous_start': previous_start.isoformat(), 'previous_end': (start-timedelta(days=1)).isoformat()},
@@ -104,6 +106,7 @@ def decision_alerts(rows, days=30, subtype='all', band='all', clock=None):
         reasons = critical_reasons(r)
         if reasons:
             individual.append({'id': r['id'], 'subtype': r['subtype'], 'occurred_at': r['occurred_at'],
+                               'legal': classify(r)['label'],
                                'status': r['status'], 'value_band': value_band(r), 'harm': harm(r)['score'],
                                'reasons': reasons, 'cell': cell_info(cell_key(r))['name']})
     # Pendientes primero: son los que todavía nadie miró.
@@ -122,14 +125,16 @@ def decision_alerts(rows, days=30, subtype='all', band='all', clock=None):
         if level is None:
             continue
         if level == 'vigilancia':
-            reason = 'Varios robos de bajo impacto'
+            reason = 'Varios hechos de bajo impacto'
         elif critical:
             reason = f'{critical} evento(s) grave(s) en la zona'
         elif len(items) >= 3:
-            reason = 'Concentración de robos con daño relevante'
+            reason = 'Concentración de hechos con daño relevante'
         else:
             reason = 'Pocos reportes, pero de alto daño'
+        legal = Counter(classify(r)['family'] for r in items)
         zones.append({**cell_info(key), 'count': len(items), 'harm': total, 'critical': critical,
+                      'robos': legal['robo'], 'hurtos': legal['hurto'],
                       'level': level, 'reason': reason, 'only_by_harm': len(items) < 3})
     for i, z in enumerate(sorted(zones, key=lambda z: (-z['count'], z['name']))):
         z['rank_by_count'] = i + 1
@@ -140,7 +145,7 @@ def decision_alerts(rows, days=30, subtype='all', band='all', clock=None):
             'individual_pending': sum(a['status'] == 'recibido' for a in individual),
             'zones': zones, 'hidden_by_count': sum(z['only_by_harm'] for z in zones),
             'rules': {'critical_harm': CRITICAL_HARM, 'zone_medium': ZONE_MEDIUM, 'zone_high': ZONE_HIGH,
-                      'weights': {'base': 1, 'weapon': HARM_WEAPON, 'injury': HARM_INJURY,
+                      'weights': {'base': 1, 'force': HARM_FORCE, 'weapon': HARM_WEAPON, 'injury': HARM_INJURY,
                                   'value': {VALUE_BANDS[k]: v for k, v in HARM_VALUE.items()}}}}
 
 def management_metrics(rows, history, evidence_ids, days=30, subtype='all', band='all', clock=None):

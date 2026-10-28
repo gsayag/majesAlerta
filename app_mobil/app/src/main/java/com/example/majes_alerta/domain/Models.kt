@@ -36,7 +36,9 @@ data class Report(
     val valueBand: String? = null,
     val serverId: String? = null,
     val trackingCode: String? = null,
-    val syncError: String? = null
+    val syncError: String? = null,
+    val force: String? = null,
+    val circumstances: List<String>? = null
 )
 
 /** Estados de envío al servidor. */
@@ -48,7 +50,7 @@ object SyncStatus {
 }
 
 data class DraftReport(
-    val type: String = "Robo a persona",
+    val type: String = "A una persona",
     val description: String = "",
     val occurredAt: String = "",
     val location: ReportLocation? = null,
@@ -56,7 +58,9 @@ data class DraftReport(
     val weapon: Boolean = false,
     val injury: Boolean = false,
     val consent: Boolean = false,
-    val valueBand: String? = null
+    val valueBand: String? = null,
+    val force: String? = null,
+    val circumstances: List<String>? = null
 )
 
 data class AppState(

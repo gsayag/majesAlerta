@@ -44,9 +44,9 @@ export function createReport(s,config){
  para('DBSCAN espacial: radio 250 metros, mínimo 4 puntos incluyendo el punto central; distancia Haversine. El periodo se filtra antes del algoritmo. No es ST-DBSCAN.');
  para('Las geometrías públicas son celdas aproximadas de 0,006 grados y mínimo 3 reportes. Las huellas de los grupos pueden superponerse. Los identificadores cambian entre consultas. El umbral no garantiza anonimato frente a filtros repetidos.');
  para('Solo se incluyen reportes validados o cerrados. La validación es una revisión del prototipo, no una verificación policial. El cierre no indica resolución del delito.');
- para('Los datos no permiten estimar tasas de criminalidad, predecir delitos ni demostrar reducción de robos. El mapa de calles no se incorpora al PDF; se exportan estadísticas y gráficos del filtro.');
+ para('Los datos no permiten estimar tasas de criminalidad, predecir delitos ni demostrar reducción de robos o hurtos. El mapa de calles no se incorpora al PDF; se exportan estadísticas y gráficos del filtro.');
  section('Trazabilidad');para(`Generado: ${new Date(s.generated_at).toLocaleString('es-PE',{timeZone:'America/Lima'})} (Perú). Procesamiento analítico: ${s.elapsed_ms} ms, sin red ni renderizado. Fuente: base local ficticia de Majes Alerta.`);
- const pages=doc.getNumberOfPages();for(let i=1;i<=pages;i++){doc.setPage(i);doc.setDrawColor(220,228,218);doc.line(15,282,195,282);text('Proyecto académico · Datos ficticios · Solo robos',15,289,9);text(`${i} / ${pages}`,181,289,9);}
+ const pages=doc.getNumberOfPages();for(let i=1;i<=pages;i++){doc.setPage(i);doc.setDrawColor(220,228,218);doc.line(15,282,195,282);text('Proyecto académico · Datos ficticios · Robos y hurtos',15,289,9);text(`${i} / ${pages}`,181,289,9);}
  return doc;
 }
 export function downloadReport(s,config){

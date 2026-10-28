@@ -462,7 +462,7 @@ fun ReportScreen(
         )
 
         Text(
-            text = "Solo robos · caso ficticio · guardado en este celular.",
+            text = "Robos y hurtos · caso ficticio · se envía al servidor del demo.",
             fontSize = 14.sp,
             color = AppMuted,
             lineHeight = 22.sp
@@ -549,7 +549,46 @@ fun ReportScreen(
                     )
 
                     Text(
-                        text = "Valor aproximado de lo robado",
+                        text = "¿Hubo violencia o amenaza?",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppInk
+                    )
+                    AppChips(
+                        items = ReportsDomain.FORCES.values.toList(),
+                        selectedValue = ReportsDomain.FORCES[currentDraft.force ?: ""] ?: "",
+                        onSelect = { label ->
+                            val key = ReportsDomain.FORCES.entries.first { it.value == label }.key
+                            currentDraft = currentDraft.copy(force = key)
+                        }
+                    )
+                    Text(
+                        text = "Sin violencia es un hurto; con violencia o amenaza, un robo.",
+                        fontSize = 12.sp,
+                        color = AppMuted
+                    )
+
+                    Text(
+                        text = "Circunstancias (marca las que apliquen)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppInk
+                    )
+                    ReportsDomain.CIRCUMSTANCES.forEach { (key, label) ->
+                        val selected = currentDraft.circumstances.orEmpty()
+                        AppCheck(
+                            value = key in selected,
+                            onValueChange = { checked ->
+                                currentDraft = currentDraft.copy(
+                                    circumstances = if (checked) selected + key else selected - key
+                                )
+                            },
+                            label = label
+                        )
+                    }
+
+                    Text(
+                        text = "Valor aproximado de lo sustraído",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = AppInk
@@ -563,7 +602,7 @@ fun ReportScreen(
                         }
                     )
                     Text(
-                        text = "Ayuda a distinguir un robo menor de uno grave. Un robo de vehículo alerta aunque sea el único en la zona.",
+                        text = "Ayuda a priorizar. Hasta S/ 535 (10% de la UIT) un hurto simple se considera falta.",
                         fontSize = 12.sp,
                         color = AppMuted
                     )
@@ -635,7 +674,7 @@ fun ReportScreen(
                         color = AppInk
                     )
                     Text(
-                        text = "El GPS obtiene tu posición actual. Confirma o corrige las coordenadas si el robo ocurrió en otro lugar. No se realiza seguimiento en segundo plano.",
+                        text = "El GPS obtiene tu posición actual. Confirma o corrige las coordenadas si el hecho ocurrió en otro lugar. No se realiza seguimiento en segundo plano.",
                         fontSize = 12.sp,
                         color = AppMuted,
                         lineHeight = 19.sp
@@ -1270,7 +1309,7 @@ fun SettingsScreen(
                     color = AppInk
                 )
                 Text(
-                    text = "1. Iniciar server.py en la PC.\n2. Crear reporte con foto y valor de lo robado.\n3. Usar el punto ficticio y registrar.\n4. Abrir /gestion en la web y validar el caso.\n5. Volver a la app y tocar «Actualizar estado».\n6. Mostrar las alertas por gravedad en /gestion-datos.",
+                    text = "1. Iniciar server.py en la PC.\n2. Crear reporte: violencia, circunstancias y valor.\n3. Usar el punto ficticio y registrar.\n4. Abrir /gestion en la web y validar el caso.\n5. Volver a la app y tocar «Actualizar estado».\n6. Mostrar la figura legal en /gestion y el análisis en /analisis.",
                     fontSize = 12.sp,
                     color = AppMuted,
                     lineHeight = 19.sp
@@ -1462,7 +1501,7 @@ fun DetailScreen(
                 )
 
                 Text(
-                    text = "Valor de lo robado: ${ReportsDomain.VALUE_BANDS[ReportsDomain.valueBand(report.type, report.valueBand)]} · Índice de daño ${ReportsDomain.harm(report)}",
+                    text = "Valor de lo sustraído: ${ReportsDomain.VALUE_BANDS[ReportsDomain.valueBand(report.type, report.valueBand)]} · Índice de daño ${ReportsDomain.harm(report)}",
                     fontSize = 12.sp,
                     color = AppInk
                 )

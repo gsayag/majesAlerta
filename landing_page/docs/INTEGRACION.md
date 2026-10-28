@@ -44,8 +44,8 @@ En el móvil, `localhost` no es tu PC ni un servidor remoto. Durante desarrollo 
 | Método y ruta | Acceso | Entrada / salida principal |
 | --- | --- | --- |
 | `GET /api/config` | Público | Tipos de robo, área ilustrativa, fecha/hora del servidor y estados. |
-| `POST /api/reports` | Público, solo demo | Crea un reporte y entrega identificador + código privado. Acepta `value_band` opcional: `sin_dato`, `bajo`, `medio`, `alto`, `muy_alto`. |
-| `GET /api/stats` | Público | Recibe `days=7/30/90`, `subtype=all/persona/negocio/vivienda/vehiculo`, `band=all/0/1/2/3`. Entrega conteos, serie temporal, franjas y celdas publicables. |
+| `POST /api/reports` | Público, solo demo | Crea un reporte y entrega identificador + código privado. Acepta `value_band` (`sin_dato`, `bajo`, `medio`, `alto`, `muy_alto`), `force` (`sin_violencia`, `amenaza`, `violencia`, `sin_dato`) y `circumstances` (lista: `dos_o_mas`, `casa_habitada`, `destreza`, `vehiculo_medio`, `uso_momentaneo`). Todos opcionales. |
+| `GET /api/stats` | Público | Recibe `days=7/30/90`, `subtype=all/persona/negocio/vivienda/vehiculo`, `band=all/0/1/2/3`, `family=all/hurto/robo`. Entrega conteos, serie temporal, franjas y celdas publicables. |
 | `GET /api/evaluate` | Público | Escenario sintético: `size`, `eps`, `min_samples` y `seed`; coincidencias, precisión, cobertura, F1 y tiempo. |
 | `GET /api/admin/metrics` | Revisor | Mismos filtros del panel; estados, prioridades, mediana de revisión, calidad y `alerts` (eventos graves y zonas por índice de daño). |
 | `GET /api/export.csv` | Público | Mismos filtros; descarga únicamente celdas agregadas. |
@@ -53,7 +53,8 @@ En el móvil, `localhost` no es tu PC ni un servidor remoto. Durante desarrollo 
 | `POST /api/login` | Credencial demo | Crea una sesión de revisión de 8 horas. |
 | `POST /api/logout` | Sesión | Revoca la sesión actual. |
 | `GET /api/admin/reports` | Revisor | Reportes individuales, puntajes y posibles coincidencias. |
-| `POST /api/admin/status` | Revisor | Cambia estado, exige nota y, para duplicados, ID original. |
+| `POST /api/admin/status` | Revisor | Cambia estado, exige nota y, para duplicados, ID original. `legal_class` opcional confirma o corrige la figura legal. |
+| `POST /api/admin/ai-analysis` | Revisor | Mismos filtros en el cuerpo JSON (+ `refresh`). Devuelve `analysis` (resumen, zonas con acciones, patrones, limitaciones), `source` (`claude` o `reglas`), `context` enviado y `map_cells`. |
 | `GET /api/admin/evidence/ID` | Revisor | Sirve la imagen privada. |
 
 Ejemplo de cuerpo de registro (reemplazar fecha/hora por una fecha pasada válida):
@@ -68,6 +69,8 @@ Ejemplo de cuerpo de registro (reemplazar fecha/hora por una fecha pasada válid
   "weapon": false,
   "injury": false,
   "value_band": "medio",
+  "force": "amenaza",
+  "circumstances": ["dos_o_mas"],
   "consent": true,
   "photo": null
 }

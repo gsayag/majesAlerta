@@ -113,7 +113,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 history = listOf(StatusHistoryItem(status, at)),
                 syncStatus = SyncStatus.PENDING,
                 synthetic = true,
-                valueBand = draft.valueBand ?: "sin_dato"
+                valueBand = draft.valueBand ?: "sin_dato",
+                force = draft.force ?: "sin_dato",
+                circumstances = draft.circumstances ?: emptyList()
             )
 
             update { current ->

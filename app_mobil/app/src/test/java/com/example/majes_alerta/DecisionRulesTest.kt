@@ -24,27 +24,44 @@ class DecisionRulesTest {
 
     @Test
     fun carTheftAlertsAloneButGlassesDoNot() {
-        assertTrue(ReportsDomain.criticalReasons(report("Robo a persona", "bajo")).isEmpty())
-        assertEquals(listOf("Robo de vehículo"), ReportsDomain.criticalReasons(report("Robo de vehículo", "muy_alto")))
+        assertTrue(ReportsDomain.criticalReasons(report(ReportsDomain.TYPES[0], "bajo")).isEmpty())
+        assertEquals(listOf("Robo de vehículo"), ReportsDomain.criticalReasons(report(ReportsDomain.VEHICLE, "muy_alto")))
     }
 
     @Test
     fun harmMatchesWebRules() {
-        assertEquals(1, ReportsDomain.harm(report("Robo a persona", "bajo")))
-        assertEquals(6, ReportsDomain.harm(report("Robo de vehículo", "muy_alto")))
-        assertEquals(11, ReportsDomain.harm(report("Robo a negocio", "alto", weapon = true, injury = true)))
+        assertEquals(1, ReportsDomain.harm(report(ReportsDomain.TYPES[0], "bajo")))
+        assertEquals(6, ReportsDomain.harm(report(ReportsDomain.VEHICLE, "muy_alto")))
+        assertEquals(11, ReportsDomain.harm(report(ReportsDomain.TYPES[1], "alto", weapon = true, injury = true)))
     }
 
     @Test
     fun oldReportsWithoutValueStillWork() {
-        assertEquals("sin_dato", ReportsDomain.valueBand("Robo a persona", null))
-        assertEquals("alto", ReportsDomain.valueBand("Robo de vehículo", null))
+        assertEquals("sin_dato", ReportsDomain.valueBand(ReportsDomain.TYPES[0], null))
+        assertEquals("alto", ReportsDomain.valueBand(ReportsDomain.VEHICLE, null))
+    }
+
+    @Test
+    fun violenceAddsHarm() {
+        val theft = report(ReportsDomain.TYPES[0], "bajo")
+        assertEquals(2, ReportsDomain.harm(theft.copy(force = "amenaza")) - ReportsDomain.harm(theft))
+    }
+
+    @Test
+    fun forceIsRequired() {
+        val draft = ReportsDomain.emptyDraft().copy(
+            description = "Caso ficticio de prueba.",
+            location = ReportsDomain.CENTER.copy(confirmed = true),
+            consent = true
+        )
+        assertTrue(ReportsDomain.validate(draft).contains("Indica si hubo violencia o amenaza."))
+        assertTrue(ReportsDomain.validate(draft.copy(force = "sin_violencia")).isEmpty())
     }
 
     @Test
     fun valueRaisesPriority() {
-        val cheap = ReportsDomain.priority(report("Robo a persona", "bajo")).score
-        val costly = ReportsDomain.priority(report("Robo a persona", "muy_alto")).score
+        val cheap = ReportsDomain.priority(report(ReportsDomain.TYPES[0], "bajo")).score
+        val costly = ReportsDomain.priority(report(ReportsDomain.TYPES[0], "muy_alto")).score
         assertEquals(15, costly - cheap)
     }
 

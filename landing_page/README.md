@@ -1,6 +1,6 @@
 # Majes Alerta · Observatorio 2.0
 
-Demo universitario de reportes de **robos**, análisis territorial y evaluación de DBSCAN, para el área ilustrativa de El Pedregal, distrito de Majes, Arequipa. Los reportes son ficticios. No se envían denuncias a autoridades.
+Demo universitario de reportes de **robos y hurtos**, análisis territorial con IA y evaluación de DBSCAN, para el área ilustrativa de El Pedregal, distrito de Majes, Arequipa. Los reportes son ficticios. No se envían denuncias a autoridades.
 
 ## Abrir en Windows
 
@@ -37,11 +37,12 @@ La base anterior es compatible. Si contiene fechas antiguas puede haber filtros 
 | --- | --- | --- |
 | `/` | Portada | Presentación y acceso al observatorio. |
 | `/panel` | Vista pública | Filtros sincronizados, calor, celdas, agrupaciones DBSCAN, recurrencia, comparación de periodos, matriz día/hora, modalidades, PDF y CSV. |
-| `/gestion` | Revisión privada | Prioridad explicable, coincidencias, validación, duplicado, descarte y cierre. |
+| `/gestion` | Revisión privada | Prioridad explicable, figura legal sugerida y confirmable, coincidencias, validación, duplicado, descarte y cierre. |
 | `/gestion-datos` | Gestión y calidad privada | Estados, prioridades, pendientes, mediana hasta primera revisión y calidad de campos/evidencias. |
+| `/analisis` | Análisis con IA privado | La IA interpreta los datos y propone dónde actuar, qué hacer, quién y cuándo, con un indicador para medirlo. |
 | `/laboratorio` | Laboratorio público sintético | Radio/mínimo configurables, semilla, escenarios conocidos, cobertura, precisión, F1 y tiempos por tamaño. |
 | `/metodologia` | Criterios | Cómo leer las métricas y activar Google Maps. |
-| `/reportar` | Formulario web de prueba | Registro de un caso ficticio para probar la revisión. No es la app Android. |
+| `/reportar` | Formulario web de prueba | Registro de un caso ficticio. El canal normal del ciudadano es la app Android; la web es sobre todo para administración. |
 | `/seguimiento` | Seguimiento | Código privado aleatorio y estados del reporte. |
 
 Contraseña pública del demo: **`MajesDemo2026!`**. Cambiable con `DEMO_ADMIN_PASSWORD`. La protección de sesión es solo para demostración local, no para producción.
@@ -56,6 +57,35 @@ La app de `app_mobil` envía cada reporte nuevo a `POST /api/reports` y consulta
 4. Valida el caso en `/gestion` y en la app toca *Actualizar estado*.
 
 Solo para demo: HTTP sin cifrar y sin cuentas. Un reintento tras un corte de red puede duplicar un reporte; la revisión lo marca como posible coincidencia.
+
+## Hurto o robo (Código Penal)
+
+Quien reporta no elige el artículo. Responde preguntas simples (¿hubo violencia o amenaza?, ¿participaron dos o más personas?, ¿fue en una vivienda habitada?, ¿el bien fue devuelto tras usarlo?, valor aproximado) y `legal.py` sugiere la figura:
+
+| Figura | Artículo | Regla del demo |
+| --- | --- | --- |
+| Falta por hurto | 444 | Hurto simple de un bien de hasta 10% de la UIT (S/ 535 con UIT de S/ 5 350). |
+| Hurto simple | 185 | Sin violencia ni amenaza y sin agravantes. |
+| Hurto agravado | 186 | Sin violencia, pero de noche, con destreza o escalamiento, en vivienda habitada, por dos o más personas, sobre un vehículo u organización criminal. |
+| Hurto de uso | 187 | Sin violencia; el bien se usó y se devolvió o abandonó. |
+| Robo | 188 | Con violencia o amenaza, sin agravantes. |
+| Robo agravado | 189 | Con violencia o amenaza y a mano armada, con lesiones, de noche, por dos o más personas, en vivienda habitada, usando o sobre un vehículo u organización criminal. |
+
+- «De noche» se aproxima por la hora del hecho (18:00 a 05:59). La UIT está en `analytics.py` y debe actualizarse cada año.
+- En `/gestion` el revisor ve la figura sugerida con sus motivos y la confirma o corrige. La confirmada prevalece.
+- Los registros anteriores sin dato de violencia se mantienen como robo (el demo antes solo registraba robos), con confianza baja.
+- El panel y la gestión filtran por **tipo de delito** (robos / hurtos). La violencia o amenaza suma 2 al índice de daño.
+- Es orientativo: no reemplaza la calificación policial ni fiscal.
+
+## Análisis con IA
+
+`/analisis` (privado) responde «¿dónde actuar primero?». `ai_analysis.py` arma un resumen **agregado** por zona (reportes, índice de daño, robos/hurtos, figuras legales, franja y modalidad predominantes, recurrencia, agrupaciones DBSCAN, horas pico, tendencia) y se lo entrega a Claude, que devuelve en JSON con esquema fijo: lectura general, hasta 5 zonas con diagnóstico, acciones (qué, quién, cuándo) e indicador para medir el efecto, patrones y limitaciones.
+
+- **No se envían** descripciones, identificadores, fotos ni coordenadas exactas. La página permite ver exactamente lo que recibió la IA.
+- Para activarla (opcional): `pip install anthropic` y `ANTHROPIC_API_KEY` (o `ant auth login`). Modelo por defecto `claude-opus-5-5`; se cambia con `MAJES_AI_MODEL`.
+- Sin el paquete o sin credenciales, la misma página muestra un **análisis por reglas** con el mismo formato y lo indica. El demo sigue funcionando sin internet.
+- Cada análisis se guarda 30 minutos por filtro y datos; «Regenerar» fuerza uno nuevo. Cada llamada a la IA consume créditos de la API.
+- Las recomendaciones requieren criterio humano: no predicen delitos ni señalan personas.
 
 ## Mapas
 
@@ -100,14 +130,16 @@ El escenario no cambia la base de reportes ni se mezcla con las estadísticas. S
 - `server.py`: rutas HTTP, validación, sesiones, configuración.
 - `store.py`: SQLite, historial y evidencia privada.
 - `analytics.py`: distancias, DBSCAN, filtros y prioridades.
-- `insights.py`: agregados públicos y gestión privada.
+- `insights.py`: agregados públicos, gestión privada y alertas por gravedad.
+- `legal.py`: clasificación orientativa hurto/robo según el Código Penal.
+- `ai_analysis.py`: interpretación con IA (Claude) y análisis por reglas de respaldo.
 - `evaluation.py`: escenarios y métricas de referencia.
 - `web/app.js`: navegación, portada y flujo de reportes.
 - `web/analysis-ui.js`: paneles analíticos y laboratorio.
 - `web/map.js`: adaptadores Leaflet/local y Google; `grid-map.js`: alternativa esquemática.
 - `web/report-pdf.js`: PDF generado en el navegador.
 
-Sin servidor compartido con Android en esta entrega. El próximo paso sería una API común y migración a PostgreSQL/PostGIS; no es necesario reescribir los gráficos para hacerlo.
+La app Android usa esta misma API (ver «Conectar la app Android»). El próximo paso sería migrar a PostgreSQL/PostGIS con cuentas y roles; no es necesario reescribir los gráficos para hacerlo.
 
 ## Validación y límites
 

@@ -18,7 +18,12 @@ class LocalRepository(context: Context) {
             if (state == null || state.version != 1) {
                 throw IllegalStateException("No se pudo leer la versión de los datos locales.")
             }
-            state
+            // Datos guardados antes de incluir hurtos usaban "Robo a persona", etc.
+            val legacy = ReportsDomain.LEGACY_TYPES
+            state.copy(
+                reports = state.reports.map { r -> legacy[r.type]?.let { r.copy(type = it) } ?: r },
+                draft = legacy[state.draft.type]?.let { state.draft.copy(type = it) } ?: state.draft
+            )
         } catch (e: Exception) {
             null
         }

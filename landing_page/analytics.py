@@ -7,19 +7,26 @@ LIMA = timezone(timedelta(hours=-5))
 # Ventana ilustrativa de El Pedregal, Majes. No es el límite administrativo.
 BOUNDS = {"south": -16.380, "north": -16.335, "west": -72.212, "east": -72.160}
 CENTER = {"lat": -16.357, "lng": -72.187}
-TYPES = {"persona": "Robo a persona", "negocio": "Robo a negocio", "vivienda": "Robo a vivienda", "vehiculo": "Robo de vehículo"}
+# Qué o a quién afectó el hecho. La figura legal (hurto o robo) se clasifica aparte, en legal.py.
+TYPES = {"persona": "A una persona", "negocio": "A un negocio", "vivienda": "A una vivienda", "vehiculo": "Vehículo o autopartes"}
 STATUSES = {"recibido": "Recibido", "validado": "Validado", "cerrado": "Cerrado", "duplicado": "Duplicado", "descartado": "Descartado"}
 VALID_STATUSES = {"validado", "cerrado"}
 
-# Valor aproximado de lo robado. Rangos ilustrativos en soles; deben calibrarse con actores locales.
-VALUE_BANDS = {"sin_dato": "No indicado", "bajo": "Menos de S/ 500", "medio": "S/ 500 a S/ 2 000",
-               "alto": "S/ 2 000 a S/ 10 000", "muy_alto": "Más de S/ 10 000"}
+# Unidad Impositiva Tributaria. Verificar y actualizar cada año (2025: S/ 5 350).
+# El 10% de la UIT separa la falta por hurto (Art. 444) del hurto simple (Art. 185).
+UIT = 5350
+FALTA_LIMIT = round(UIT * 0.10)
+
+# Valor aproximado de lo sustraído, en soles.
+VALUE_BANDS = {"sin_dato": "No indicado", "bajo": f"Hasta S/ {FALTA_LIMIT} (10% de la UIT)",
+               "medio": f"S/ {FALTA_LIMIT + 1} a S/ 2 000", "alto": "S/ 2 001 a S/ 10 000", "muy_alto": "Más de S/ 10 000"}
 
 # Pesos del índice de daño. Un robo menor vale 1; un robo de vehículo de alto valor vale 6 o más.
 # Son supuestos explícitos del demo (pendiente calibrar con expertos, p. ej. AHP), no un estándar.
 HARM_VALUE = {"sin_dato": 0, "bajo": 0, "medio": 1, "alto": 3, "muy_alto": 5}
 HARM_WEAPON = 3
 HARM_INJURY = 4
+HARM_FORCE = 2  # violencia o amenaza: lo que distingue un robo de un hurto
 CRITICAL_HARM = 6
 
 
@@ -90,7 +97,8 @@ def harm(report):
     """Índice de daño del reporte: 1 base + valor perdido + violencia."""
     parts = [
         {"label": "Base", "points": 1},
-        {"label": "Valor de lo robado", "points": HARM_VALUE[value_band(report)]},
+        {"label": "Valor de lo sustraído", "points": HARM_VALUE[value_band(report)]},
+        {"label": "Violencia o amenaza", "points": HARM_FORCE if report.get('force') in {'amenaza', 'violencia'} else 0},
         {"label": "Arma reportada", "points": HARM_WEAPON if report.get('weapon') else 0},
         {"label": "Lesión reportada", "points": HARM_INJURY if report.get('injury') else 0},
     ]
@@ -124,7 +132,7 @@ def priority(report, all_rows, clock=None):
         {"label": "Base de revisión", "points": 10},
         {"label": "Arma reportada", "points": 30 if report['weapon'] else 0},
         {"label": "Lesión reportada", "points": 15 if report['injury'] else 0},
-        {"label": "Valor de lo robado", "points": {"alto": 10, "muy_alto": 15, "medio": 5}.get(value_band(report), 0)},
+        {"label": "Valor de lo sustraído", "points": {"alto": 10, "muy_alto": 15, "medio": 5}.get(value_band(report), 0)},
         {"label": "Recencia del hecho", "points": recent},
         {"label": "Recurrencia cercana (7 días)", "points": min(15, close * 3)},
     ]

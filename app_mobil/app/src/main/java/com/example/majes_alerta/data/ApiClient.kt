@@ -44,6 +44,8 @@ class ApiClient(private val baseUrl: String) {
             "weapon" to report.weapon,
             "injury" to report.injury,
             "value_band" to (report.valueBand ?: "sin_dato"),
+            "force" to (report.force ?: "sin_dato"),
+            "circumstances" to (report.circumstances ?: emptyList()).filter { it in ReportsDomain.CIRCUMSTANCES },
             "consent" to true,
             "photo" to photoBase64
         )

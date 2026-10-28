@@ -7,27 +7,53 @@ import java.util.TimeZone
 
 object ReportsDomain {
 
+    /** Qué o a quién afectó el hecho. Si fue hurto o robo lo determinan la violencia y las circunstancias. */
     val TYPES = listOf(
-        "Robo a persona",
-        "Robo a negocio",
-        "Robo a vivienda",
-        "Robo de vehículo"
+        "A una persona",
+        "A un negocio",
+        "A una vivienda",
+        "Vehículo o autopartes"
+    )
+    val VEHICLE = TYPES[3]
+
+    /** Nombres usados antes de incluir hurtos; se convierten al leer datos guardados. */
+    val LEGACY_TYPES = mapOf(
+        "Robo a persona" to TYPES[0],
+        "Robo a negocio" to TYPES[1],
+        "Robo a vivienda" to TYPES[2],
+        "Robo de vehículo" to TYPES[3]
+    )
+
+    /** ¿Hubo violencia o amenaza? Distingue un hurto de un robo. Claves iguales a la API. */
+    val FORCES = linkedMapOf(
+        "sin_violencia" to "No, sin violencia ni amenaza",
+        "amenaza" to "Me amenazaron",
+        "violencia" to "Me agredieron"
+    )
+
+    /** Circunstancias que agravan un hurto o robo (Código Penal, arts. 186, 187 y 189). */
+    val CIRCUMSTANCES = linkedMapOf(
+        "dos_o_mas" to "Participaron dos o más personas",
+        "casa_habitada" to "Dentro de una vivienda habitada",
+        "destreza" to "Con destreza, escalamiento o rotura de puertas, ventanas o candados",
+        "vehiculo_medio" to "Los autores usaron un vehículo (moto, auto)",
+        "uso_momentaneo" to "El bien fue devuelto o abandonado tras usarlo"
     )
 
     /** Claves que espera la API web, en el mismo orden que TYPES. */
     val TYPE_KEYS = mapOf(
-        "Robo a persona" to "persona",
-        "Robo a negocio" to "negocio",
-        "Robo a vivienda" to "vivienda",
-        "Robo de vehículo" to "vehiculo"
+        TYPES[0] to "persona",
+        TYPES[1] to "negocio",
+        TYPES[2] to "vivienda",
+        TYPES[3] to "vehiculo"
     )
 
-    /** Valor aproximado de lo robado (clave de API → etiqueta). Igual que en landing_page/analytics.py. */
+    /** Valor aproximado de lo sustraído (clave de API → etiqueta). Igual que en landing_page/analytics.py. */
     val VALUE_BANDS = linkedMapOf(
         "sin_dato" to "No indicado",
-        "bajo" to "Menos de S/ 500",
-        "medio" to "S/ 500 a S/ 2 000",
-        "alto" to "S/ 2 000 a S/ 10 000",
+        "bajo" to "Hasta S/ 535 (10% de la UIT)",
+        "medio" to "S/ 536 a S/ 2 000",
+        "alto" to "S/ 2 001 a S/ 10 000",
         "muy_alto" to "Más de S/ 10 000"
     )
 
@@ -94,7 +120,10 @@ object ReportsDomain {
     fun validate(d: DraftReport, clock: Long = System.currentTimeMillis()): List<String> {
         val errors = mutableListOf<String>()
         if (d.type !in TYPES) {
-            errors.add("Selecciona una modalidad de robo.")
+            errors.add("Indica qué o a quién afectó el hecho.")
+        }
+        if (d.force !in FORCES) {
+            errors.add("Indica si hubo violencia o amenaza.")
         }
         val descTrim = d.description.trim()
         if (descTrim.length < 12 || descTrim.length > 1200) {
@@ -174,10 +203,10 @@ object ReportsDomain {
     /** Un robo de vehículo sin valor indicado se asume al menos "alto" (misma regla que la web). */
     fun valueBand(type: String, band: String?): String {
         val b = if (band != null && band in VALUE_BANDS) band else "sin_dato"
-        return if (type == "Robo de vehículo" && b in setOf("sin_dato", "bajo", "medio")) "alto" else b
+        return if (type == VEHICLE && b in setOf("sin_dato", "bajo", "medio")) "alto" else b
     }
 
-    /** Índice de daño: 1 base + valor de lo robado + arma 3 + lesión 4. Pesos ilustrativos. */
+    /** Índice de daño: 1 base + valor + violencia o amenaza 2 + arma 3 + lesión 4. Igual que la web. */
     fun harm(r: Report): Int {
         val value = when (valueBand(r.type, r.valueBand)) {
             "medio" -> 1
@@ -185,15 +214,16 @@ object ReportsDomain {
             "muy_alto" -> 5
             else -> 0
         }
-        return 1 + value + (if (r.weapon) 3 else 0) + (if (r.injury) 4 else 0)
+        val force = if (r.force == "amenaza" || r.force == "violencia") 2 else 0
+        return 1 + value + force + (if (r.weapon) 3 else 0) + (if (r.injury) 4 else 0)
     }
 
     /** Motivos por los que un solo reporte es grave aunque no haya otros cerca. */
     fun criticalReasons(r: Report): List<String> {
         val reasons = mutableListOf<String>()
         if (r.injury) reasons.add("Lesión reportada")
-        if (r.type == "Robo de vehículo") reasons.add("Robo de vehículo")
-        if (valueBand(r.type, r.valueBand) == "muy_alto" && r.type != "Robo de vehículo") reasons.add("Pérdida mayor a S/ 10 000")
+        if (r.type == VEHICLE) reasons.add("Robo de vehículo")
+        if (valueBand(r.type, r.valueBand) == "muy_alto" && r.type != VEHICLE) reasons.add("Pérdida mayor a S/ 10 000")
         if (reasons.isEmpty() && harm(r) >= 6) reasons.add("Índice de daño ≥ 6")
         return reasons
     }
@@ -214,7 +244,7 @@ object ReportsDomain {
             "Base" to 10,
             "Arma declarada" to weaponScore,
             "Lesión declarada" to injuryScore,
-            "Valor de lo robado" to valueScore,
+            "Valor de lo sustraído" to valueScore,
             "Recencia" to recencyScore
         )
         val score = parts.sumOf { it.second }
