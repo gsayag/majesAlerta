@@ -1,0 +1,11 @@
+{
+  "name": "majes-alerta-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo universitario local de reporte de robos y análisis territorial",
+  "scripts": {
+    "dev": "python3 server.py",
+    "test": "python3 -m unittest discover -s tests -v"
+  }
+}
