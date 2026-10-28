@@ -14,6 +14,34 @@ object ReportsDomain {
         "Robo de vehículo"
     )
 
+    /** Claves que espera la API web, en el mismo orden que TYPES. */
+    val TYPE_KEYS = mapOf(
+        "Robo a persona" to "persona",
+        "Robo a negocio" to "negocio",
+        "Robo a vivienda" to "vivienda",
+        "Robo de vehículo" to "vehiculo"
+    )
+
+    /** Valor aproximado de lo robado (clave de API → etiqueta). Igual que en landing_page/analytics.py. */
+    val VALUE_BANDS = linkedMapOf(
+        "sin_dato" to "No indicado",
+        "bajo" to "Menos de S/ 500",
+        "medio" to "S/ 500 a S/ 2 000",
+        "alto" to "S/ 2 000 a S/ 10 000",
+        "muy_alto" to "Más de S/ 10 000"
+    )
+
+    /** Estados del servidor → texto que muestra la app. */
+    val SERVER_STATES = mapOf(
+        "recibido" to "Recibido por el servidor",
+        "validado" to "Validado",
+        "cerrado" to "Cerrado",
+        "duplicado" to "Duplicado",
+        "descartado" to "Descartado"
+    )
+
+    const val DEFAULT_API_URL = "http://10.0.2.2:8000"
+
     val STATES = listOf(
         "Registrado localmente",
         "En revisión (simulada)",
@@ -58,7 +86,8 @@ object ReportsDomain {
             photo = null,
             weapon = false,
             injury = false,
-            consent = false
+            consent = false,
+            valueBand = "sin_dato"
         )
     }
 
@@ -142,16 +171,50 @@ object ReportsDomain {
         }.map { it.id }
     }
 
+    /** Un robo de vehículo sin valor indicado se asume al menos "alto" (misma regla que la web). */
+    fun valueBand(type: String, band: String?): String {
+        val b = if (band != null && band in VALUE_BANDS) band else "sin_dato"
+        return if (type == "Robo de vehículo" && b in setOf("sin_dato", "bajo", "medio")) "alto" else b
+    }
+
+    /** Índice de daño: 1 base + valor de lo robado + arma 3 + lesión 4. Pesos ilustrativos. */
+    fun harm(r: Report): Int {
+        val value = when (valueBand(r.type, r.valueBand)) {
+            "medio" -> 1
+            "alto" -> 3
+            "muy_alto" -> 5
+            else -> 0
+        }
+        return 1 + value + (if (r.weapon) 3 else 0) + (if (r.injury) 4 else 0)
+    }
+
+    /** Motivos por los que un solo reporte es grave aunque no haya otros cerca. */
+    fun criticalReasons(r: Report): List<String> {
+        val reasons = mutableListOf<String>()
+        if (r.injury) reasons.add("Lesión reportada")
+        if (r.type == "Robo de vehículo") reasons.add("Robo de vehículo")
+        if (valueBand(r.type, r.valueBand) == "muy_alto" && r.type != "Robo de vehículo") reasons.add("Pérdida mayor a S/ 10 000")
+        if (reasons.isEmpty() && harm(r) >= 6) reasons.add("Índice de daño ≥ 6")
+        return reasons
+    }
+
     fun priority(d: Report, clock: Long = System.currentTimeMillis()): PriorityResult {
         val ageHours = (clock - parseIso(d.occurredAt)) / 3600000.0
-        val recencyScore = if (ageHours <= 24.0) 20 else if (ageHours <= 168.0) 10 else 0
-        val weaponScore = if (d.weapon) 40 else 0
+        val recencyScore = if (ageHours <= 24.0) 15 else if (ageHours <= 168.0) 8 else 0
+        val weaponScore = if (d.weapon) 30 else 0
         val injuryScore = if (d.injury) 15 else 0
+        val valueScore = when (valueBand(d.type, d.valueBand)) {
+            "medio" -> 5
+            "alto" -> 10
+            "muy_alto" -> 15
+            else -> 0
+        }
 
         val parts = listOf(
             "Base" to 10,
             "Arma declarada" to weaponScore,
             "Lesión declarada" to injuryScore,
+            "Valor de lo robado" to valueScore,
             "Recencia" to recencyScore
         )
         val score = parts.sumOf { it.second }

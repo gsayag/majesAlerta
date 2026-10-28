@@ -50,6 +50,7 @@ import com.example.majes_alerta.domain.Report
 import com.example.majes_alerta.domain.ReportLocation
 import com.example.majes_alerta.domain.ReportPhoto
 import com.example.majes_alerta.domain.ReportsDomain
+import com.example.majes_alerta.domain.SyncStatus
 import com.example.majes_alerta.services.DeviceService
 import com.example.majes_alerta.ui.components.AppButton
 import com.example.majes_alerta.ui.components.AppCheck
@@ -548,6 +549,26 @@ fun ReportScreen(
                     )
 
                     Text(
+                        text = "Valor aproximado de lo robado",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppInk
+                    )
+                    AppChips(
+                        items = ReportsDomain.VALUE_BANDS.values.toList(),
+                        selectedValue = ReportsDomain.VALUE_BANDS[currentDraft.valueBand ?: "sin_dato"] ?: "No indicado",
+                        onSelect = { label ->
+                            val key = ReportsDomain.VALUE_BANDS.entries.first { it.value == label }.key
+                            currentDraft = currentDraft.copy(valueBand = key)
+                        }
+                    )
+                    Text(
+                        text = "Ayuda a distinguir un robo menor de uno grave. Un robo de vehículo alerta aunque sea el único en la zona.",
+                        fontSize = 12.sp,
+                        color = AppMuted
+                    )
+
+                    Text(
                         text = "Foto de evidencia (opcional en el demo)",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -782,7 +803,7 @@ fun ReportScreen(
                     )
 
                     AppButton(
-                        title = if (busy) "Guardando…" else "Registrar reporte local",
+                        title = if (busy) "Enviando…" else "Registrar y enviar reporte",
                         disabled = busy,
                         onClick = {
                             scope.launch {
@@ -1081,8 +1102,19 @@ fun PanoramaScreen(reports: List<Report>) {
 }
 
 @Composable
-fun SettingsScreen(onResetData: () -> Unit) {
+fun SettingsScreen(
+    onResetData: () -> Unit,
+    apiUrl: String = ReportsDomain.DEFAULT_API_URL,
+    pendingCount: Int = 0,
+    onSaveApiUrl: (String) -> Unit = {},
+    onTestConnection: suspend (String) -> String = { "" },
+    onSyncPending: suspend () -> Int = { 0 }
+) {
     var showResetDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var urlText by remember(apiUrl) { mutableStateOf(apiUrl) }
+    var connectionMessage by remember { mutableStateOf("") }
+    var testing by remember { mutableStateOf(false) }
 
     if (showResetDialog) {
         AlertDialog(
@@ -1139,17 +1171,59 @@ fun SettingsScreen(onResetData: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Modo local independiente",
+                    text = "Conexión con el demo web",
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppInk
                 )
                 Text(
-                    text = "Los reportes y las fotos permanecen en el celular. El seguimiento y los cambios de estado son simulaciones. No hay cuentas reales ni conexión con el demo web.",
-                    fontSize = 14.sp,
+                    text = "Los reportes nuevos se envían a landing_page/server.py y aparecen en /gestion para su revisión. Emulador: http://10.0.2.2:8000. Celular físico: la IP de tu PC en la misma red Wi-Fi (inicia el servidor con --host 0.0.0.0).",
+                    fontSize = 12.sp,
                     color = AppMuted,
-                    lineHeight = 22.sp
+                    lineHeight = 19.sp
                 )
+                AppField(
+                    label = "Dirección del servidor",
+                    value = urlText,
+                    onValueChange = { urlText = it },
+                    placeholder = ReportsDomain.DEFAULT_API_URL,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AppButton(
+                        title = if (testing) "Probando…" else "Guardar y probar",
+                        disabled = testing,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            onSaveApiUrl(urlText)
+                            scope.launch {
+                                testing = true
+                                connectionMessage = onTestConnection(urlText)
+                                testing = false
+                            }
+                        }
+                    )
+                    AppButton(
+                        title = "Enviar pendientes ($pendingCount)",
+                        secondary = true,
+                        disabled = testing || pendingCount == 0,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            scope.launch {
+                                testing = true
+                                val left = onSyncPending()
+                                connectionMessage = if (left == 0) "Todos los reportes fueron enviados." else "Quedan $left pendientes. Revisa la conexión."
+                                testing = false
+                            }
+                        }
+                    )
+                }
+                if (connectionMessage.isNotEmpty()) {
+                    Text(text = connectionMessage, fontSize = 12.sp, color = AppInk)
+                }
 
                 Text(
                     text = "Arquitectura por capas",
@@ -1171,7 +1245,7 @@ fun SettingsScreen(onResetData: () -> Unit) {
                     color = AppInk
                 )
                 Text(
-                    text = "Cambiar el repositorio local por un adaptador HTTP autenticado y añadir una cola de sincronización con idempotencia. Las pantallas no deben conocer Supabase ni sus claves.",
+                    text = "Hoy el envío no usa cuentas ni idempotencia: si la red se corta justo después de que el servidor guarda, un reintento puede crear un duplicado (la web lo marca como posible coincidencia). Siguiente paso: autenticación y una clave de idempotencia por reporte.",
                     fontSize = 12.sp,
                     color = AppMuted,
                     lineHeight = 19.sp
@@ -1196,7 +1270,7 @@ fun SettingsScreen(onResetData: () -> Unit) {
                     color = AppInk
                 )
                 Text(
-                    text = "1. Crear reporte con foto.\n2. Pedir GPS o usar punto ficticio.\n3. Confirmar ubicación y registrar.\n4. Abrir seguimiento.\n5. Simular revisión y validación.\n6. Mostrar cómo cambia el panorama local.",
+                    text = "1. Iniciar server.py en la PC.\n2. Crear reporte con foto y valor de lo robado.\n3. Usar el punto ficticio y registrar.\n4. Abrir /gestion en la web y validar el caso.\n5. Volver a la app y tocar «Actualizar estado».\n6. Mostrar las alertas por gravedad en /gestion-datos.",
                     fontSize = 12.sp,
                     color = AppMuted,
                     lineHeight = 19.sp
@@ -1224,10 +1298,15 @@ fun DetailScreen(
     report: Report,
     allReports: List<Report>,
     onBack: () -> Unit,
-    onAdvance: (String) -> Unit
+    onAdvance: (String) -> Unit,
+    onRetry: (String) -> Unit = {},
+    onRefresh: (String) -> Unit = {},
+    busy: Boolean = false
 ) {
     val context = LocalContext.current
     val p = remember(report) { ReportsDomain.priority(report) }
+    val critical = remember(report) { ReportsDomain.criticalReasons(report) }
+    val sent = report.syncStatus == SyncStatus.SENT
     val duplicates = remember(report, allReports) { ReportsDomain.candidates(report, allReports) }
 
     Column(
@@ -1244,7 +1323,7 @@ fun DetailScreen(
         )
 
         Text(
-            text = "SEGUIMIENTO LOCAL",
+            text = if (sent) "SEGUIMIENTO EN EL SERVIDOR" else "SEGUIMIENTO LOCAL",
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = AppGreen,
@@ -1278,10 +1357,49 @@ fun DetailScreen(
                     color = AppInk
                 )
                 Text(
-                    text = "Guardado en este dispositivo · sin sincronizar",
+                    text = when (report.syncStatus) {
+                        SyncStatus.SENT -> "Enviado al servidor como ${report.serverId}"
+                        SyncStatus.PENDING -> "Guardado en el celular · pendiente de envío"
+                        SyncStatus.REJECTED -> "El servidor no aceptó el reporte"
+                        else -> "Ejemplo local · no se envía"
+                    },
                     fontSize = 12.sp,
                     color = AppMuted
                 )
+                report.syncError?.let { msg ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AppErrorBg)
+                            .padding(12.dp)
+                    ) {
+                        Text(text = msg, color = AppErrorText, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
+                }
+                report.trackingCode?.let { code ->
+                    Text(
+                        text = "Código privado de seguimiento:\n$code",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppInk
+                    )
+                }
+                if (sent) {
+                    AppButton(
+                        title = if (busy) "Consultando…" else "Actualizar estado",
+                        secondary = true,
+                        disabled = busy,
+                        onClick = { onRefresh(report.id) }
+                    )
+                }
+                if (report.syncStatus == SyncStatus.PENDING || report.syncStatus == SyncStatus.REJECTED) {
+                    AppButton(
+                        title = "Reintentar envío",
+                        secondary = true,
+                        onClick = { onRetry(report.id) }
+                    )
+                }
                 Text(
                     text = report.description,
                     fontSize = 14.sp,
@@ -1342,6 +1460,29 @@ fun DetailScreen(
                     fontSize = 12.sp,
                     color = AppMuted
                 )
+
+                Text(
+                    text = "Valor de lo robado: ${ReportsDomain.VALUE_BANDS[ReportsDomain.valueBand(report.type, report.valueBand)]} · Índice de daño ${ReportsDomain.harm(report)}",
+                    fontSize = 12.sp,
+                    color = AppInk
+                )
+
+                if (critical.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AppErrorBg)
+                            .padding(14.dp)
+                    ) {
+                        Text(
+                            text = "Alerta por gravedad: ${critical.joinToString(" · ")}. Merece atención aunque no haya otros reportes cerca.",
+                            color = AppErrorText,
+                            fontSize = 12.sp,
+                            lineHeight = 19.sp
+                        )
+                    }
+                }
 
                 p.parts.forEach { (key, score) ->
                     Row(
@@ -1427,14 +1568,16 @@ fun DetailScreen(
                     type = "text/plain"
                     putExtra(
                         Intent.EXTRA_TEXT,
-                        "Majes Alerta DEMO\n${report.id}\n${report.status}\nRegistro local ficticio, sin envío a autoridades."
+                        "Majes Alerta DEMO\n${report.serverId ?: report.id}\n${report.status}" +
+                            (report.trackingCode?.let { "\nCódigo: $it" } ?: "") +
+                            "\nReporte ficticio, sin envío a autoridades."
                     )
                 }
                 context.startActivity(Intent.createChooser(shareIntent, "Compartir reporte"))
             }
         )
 
-        Card(
+        if (!sent) Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = AppSecondaryButtonBg),
             border = androidx.compose.foundation.BorderStroke(1.dp, AppLine),
@@ -1457,7 +1600,7 @@ fun DetailScreen(
                     color = AppMuted
                 )
 
-                val isLastStatus = (report.status == ReportsDomain.STATES[3])
+                val isLastStatus = report.status !in ReportsDomain.STATES || report.status == ReportsDomain.STATES[3]
                 AppButton(
                     title = if (isLastStatus) "Recorrido completado" else "Simular siguiente estado",
                     disabled = isLastStatus,

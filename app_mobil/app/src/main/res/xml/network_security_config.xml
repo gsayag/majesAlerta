@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo para el demo: server.py corre en HTTP dentro de la red local.
+     En producción, quitar el permiso de texto plano y usar HTTPS. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

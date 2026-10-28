@@ -4,10 +4,14 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from statistics import median
 from time import perf_counter
-from analytics import (BOUNDS, TYPES, STATUSES, VALID_STATUSES, now, parse_time,
-                       selected, statistics, dbscan, priority)
+from analytics import (BOUNDS, TYPES, STATUSES, VALID_STATUSES, VALUE_BANDS, HARM_VALUE, HARM_WEAPON,
+                       HARM_INJURY, CRITICAL_HARM, now, parse_time, selected, statistics, dbscan, priority,
+                       harm, critical_reasons, value_band)
 
 STEP = .006
+# Daño acumulado de una celda para pedir atención. 6 = un robo grave o seis robos menores.
+ZONE_MEDIUM = 6
+ZONE_HIGH = 12
 
 def cell_key(r):
     return (math.floor((r['lng'] - BOUNDS['west']) / STEP), math.floor((r['lat'] - BOUNDS['south']) / STEP))
@@ -85,6 +89,60 @@ def enhanced_statistics(rows, days=30, subtype='all', band='all', clock=None):
               'elapsed_ms': round((perf_counter()-started)*1000,2)})
     return s
 
+def decision_alerts(rows, days=30, subtype='all', band='all', clock=None):
+    """Alertas para decidir dónde mirar primero.
+
+    Contar reportes trata igual un robo de lentes y un robo de auto. Aquí se suman
+    dos señales: (1) eventos graves que alertan solos y (2) zonas ordenadas por
+    índice de daño acumulado, no solo por cantidad.
+    """
+    clock = clock or now()
+    active = [r for r in rows if r['status'] not in {'duplicado', 'descartado'}]
+    cohort = selected(active, days, subtype, band, clock)
+    individual = []
+    for r in cohort:
+        reasons = critical_reasons(r)
+        if reasons:
+            individual.append({'id': r['id'], 'subtype': r['subtype'], 'occurred_at': r['occurred_at'],
+                               'status': r['status'], 'value_band': value_band(r), 'harm': harm(r)['score'],
+                               'reasons': reasons, 'cell': cell_info(cell_key(r))['name']})
+    # Pendientes primero: son los que todavía nadie miró.
+    individual.sort(key=lambda a: a['occurred_at'], reverse=True)
+    individual.sort(key=lambda a: (a['status'] != 'recibido', -a['harm']))
+    by_cell = defaultdict(list)
+    for r in cohort:
+        if r['status'] in VALID_STATUSES:
+            by_cell[cell_key(r)].append(r)
+    zones = []
+    for key, items in by_cell.items():
+        total = sum(harm(r)['score'] for r in items)
+        critical = sum(bool(critical_reasons(r)) for r in items)
+        level = ('alta' if total >= ZONE_HIGH else 'media' if total >= ZONE_MEDIUM
+                 else 'vigilancia' if len(items) >= 3 else None)
+        if level is None:
+            continue
+        if level == 'vigilancia':
+            reason = 'Varios robos de bajo impacto'
+        elif critical:
+            reason = f'{critical} evento(s) grave(s) en la zona'
+        elif len(items) >= 3:
+            reason = 'Concentración de robos con daño relevante'
+        else:
+            reason = 'Pocos reportes, pero de alto daño'
+        zones.append({**cell_info(key), 'count': len(items), 'harm': total, 'critical': critical,
+                      'level': level, 'reason': reason, 'only_by_harm': len(items) < 3})
+    for i, z in enumerate(sorted(zones, key=lambda z: (-z['count'], z['name']))):
+        z['rank_by_count'] = i + 1
+    zones.sort(key=lambda z: (-z['harm'], -z['count'], z['name']))
+    for i, z in enumerate(zones):
+        z['rank_by_harm'] = i + 1
+    return {'individual': individual[:25], 'individual_total': len(individual),
+            'individual_pending': sum(a['status'] == 'recibido' for a in individual),
+            'zones': zones, 'hidden_by_count': sum(z['only_by_harm'] for z in zones),
+            'rules': {'critical_harm': CRITICAL_HARM, 'zone_medium': ZONE_MEDIUM, 'zone_high': ZONE_HIGH,
+                      'weights': {'base': 1, 'weapon': HARM_WEAPON, 'injury': HARM_INJURY,
+                                  'value': {VALUE_BANDS[k]: v for k, v in HARM_VALUE.items()}}}}
+
 def management_metrics(rows, history, evidence_ids, days=30, subtype='all', band='all', clock=None):
     clock=clock or now()
     cohort=selected(rows,days,subtype,band,clock)
@@ -120,4 +178,5 @@ def management_metrics(rows, history, evidence_ids, days=30, subtype='all', band
                        {'label':'Coordenadas dentro del área del demo','count':located,'percent':pct(located)},
                        {'label':'Reportes con foto opcional','count':sum(r['id'] in evidence_ids for r in cohort),'percent':pct(sum(r['id'] in evidence_ids for r in cohort))},
                        {'label':'Duplicados confirmados en revisión','count':counts['duplicado'],'percent':pct(counts['duplicado'])}],
+            'alerts':decision_alerts(rows,days,subtype,band,clock),
             'synthetic':True}

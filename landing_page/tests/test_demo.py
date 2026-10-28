@@ -54,7 +54,7 @@ class AnalyticsTests(unittest.TestCase):
         self.assertEqual(sum(s['hours']),1)
 
     def test_priority_explanation_matches_score(self):
-        r=record('new',weapon=True,injury=True)
+        r=record('new',weapon=True,injury=True,value_band='muy_alto')
         peers=[record(str(i),event=now()-timedelta(hours=1)) for i in range(10)]
         p=priority(r,peers+[r])
         self.assertEqual(p['score'],100)

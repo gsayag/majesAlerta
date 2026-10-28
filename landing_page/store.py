@@ -8,6 +8,16 @@ from datetime import timedelta
 from pathlib import Path
 from analytics import now, TYPES
 
+COLUMNS = ('id', 'tracking', 'subtype', 'occurred_at', 'created_at', 'lat', 'lng', 'description',
+           'weapon', 'injury', 'status', 'synthetic', 'duplicate_of', 'value_band')
+INSERT = f"INSERT INTO reports ({','.join(COLUMNS)}) VALUES ({','.join('?' * len(COLUMNS))})"
+
+# Valor típico por modalidad para los datos sintéticos.
+SEED_VALUES = {'persona': (['bajo', 'medio', 'alto'], [62, 30, 8]),
+               'negocio': (['bajo', 'medio', 'alto', 'muy_alto'], [30, 40, 24, 6]),
+               'vivienda': (['bajo', 'medio', 'alto', 'muy_alto'], [20, 40, 30, 10]),
+               'vehiculo': (['alto', 'muy_alto'], [45, 55])}
+
 
 @contextmanager
 def connect(path):
@@ -41,6 +51,9 @@ def init_db(path, seed=True):
             report_id TEXT PRIMARY KEY, content BLOB NOT NULL,
             FOREIGN KEY (report_id) REFERENCES reports(id));
         ''')
+        # Bases creadas por versiones anteriores no tienen la columna de valor.
+        if 'value_band' not in {c[1] for c in con.execute('PRAGMA table_info(reports)')}:
+            con.execute("ALTER TABLE reports ADD COLUMN value_band TEXT NOT NULL DEFAULT 'sin_dato'")
         count = con.execute('SELECT count(*) FROM reports').fetchone()[0]
         if count or not seed:
             return
@@ -58,11 +71,15 @@ def init_db(path, seed=True):
                 event = clock - timedelta(minutes=rng.randrange(10, 180))
             status = rng.choices(['validado', 'cerrado', 'recibido'], [60, 24, 16])[0]
             rid = f'MJ-DEMO-{i + 1:04d}'
-            row = (rid, secrets.token_hex(12).upper(), rng.choice(list(TYPES)), event.isoformat(),
+            subtype = rng.choice(list(TYPES))
+            # Generador aparte para no alterar la secuencia original de los datos sintéticos.
+            bands, weights = SEED_VALUES[subtype]
+            value = random.Random(i).choices(bands, weights)[0]
+            row = (rid, secrets.token_hex(12).upper(), subtype, event.isoformat(),
                    (event + timedelta(minutes=5)).isoformat(), lat, lng,
                    'Registro ficticio para evaluar visualización y análisis. No corresponde a un hecho real.',
-                   int(rng.random() < .28), int(rng.random() < .12), status, 1, None)
-            con.execute('INSERT INTO reports VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', row)
+                   int(rng.random() < .28), int(rng.random() < .12), status, 1, None, value)
+            con.execute(INSERT, row)
             con.execute('INSERT INTO history(report_id,status,timestamp,note) VALUES (?,?,?,?)',
                         (rid, 'recibido', event.isoformat(), 'Registro sintético de demostración.'))
             if status != 'recibido':
@@ -80,9 +97,9 @@ def create_report(path, data):
     tracking = secrets.token_hex(12).upper()
     created = now().isoformat()
     with connect(path) as con:
-        con.execute('''INSERT INTO reports VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                    (rid, tracking, data['subtype'], data['occurred_at'], created, data['lat'], data['lng'],
-                     data['description'], int(data['weapon']), int(data['injury']), 'recibido', 1, None))
+        con.execute(INSERT, (rid, tracking, data['subtype'], data['occurred_at'], created, data['lat'], data['lng'],
+                             data['description'], int(data['weapon']), int(data['injury']), 'recibido', 1, None,
+                             data.get('value_band', 'sin_dato')))
         con.execute('INSERT INTO history(report_id,status,timestamp,note) VALUES (?,?,?,?)',
                     (rid, 'recibido', created, 'Reporte recibido. Pendiente de revisión humana.'))
         if data.get('evidence'):

@@ -50,6 +50,8 @@ import com.example.majes_alerta.ui.theme.AppGreen
 import com.example.majes_alerta.ui.theme.AppPaper
 import com.example.majes_alerta.ui.theme.AppMuted
 import com.example.majes_alerta.ui.theme.MAJES_ALERTATheme
+import com.example.majes_alerta.domain.ReportsDomain
+import com.example.majes_alerta.domain.SyncStatus
 import com.example.majes_alerta.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -70,6 +72,7 @@ fun MainApp() {
     val viewModel = remember { MainViewModel(context.applicationContext as Application) }
     val uiState by viewModel.uiState.collectAsState()
     val errorMessage by viewModel.error.collectAsState()
+    val busy by viewModel.isBusy.collectAsState()
 
     var selectedTab by remember { mutableStateOf("Inicio") }
     var selectedReportId by remember { mutableStateOf<String?>(null) }
@@ -136,7 +139,7 @@ fun MainApp() {
                         color = AppGreen
                     )
                 }
-                Badge(text = "DEMO LOCAL")
+                Badge(text = "DEMO")
             }
         },
         bottomBar = {
@@ -230,7 +233,10 @@ fun MainApp() {
                         report = chosen,
                         allReports = state.reports,
                         onBack = { selectedReportId = null },
-                        onAdvance = { viewModel.advance(it) }
+                        onAdvance = { viewModel.advance(it) },
+                        onRetry = { viewModel.retry(it) },
+                        onRefresh = { viewModel.refreshStatus(it) },
+                        busy = busy
                     )
                 } else {
                     selectedReportId = null
@@ -263,7 +269,12 @@ fun MainApp() {
                         reports = state.reports
                     )
                     "Ajustes" -> SettingsScreen(
-                        onResetData = { viewModel.resetData() }
+                        onResetData = { viewModel.resetData() },
+                        apiUrl = state.apiUrl ?: ReportsDomain.DEFAULT_API_URL,
+                        pendingCount = state.reports.count { it.syncStatus == SyncStatus.PENDING },
+                        onSaveApiUrl = { viewModel.setApiUrl(it) },
+                        onTestConnection = { viewModel.testConnection(it) },
+                        onSyncPending = { viewModel.syncPending() }
                     )
                 }
             }

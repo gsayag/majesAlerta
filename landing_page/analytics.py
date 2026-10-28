@@ -11,6 +11,17 @@ TYPES = {"persona": "Robo a persona", "negocio": "Robo a negocio", "vivienda": "
 STATUSES = {"recibido": "Recibido", "validado": "Validado", "cerrado": "Cerrado", "duplicado": "Duplicado", "descartado": "Descartado"}
 VALID_STATUSES = {"validado", "cerrado"}
 
+# Valor aproximado de lo robado. Rangos ilustrativos en soles; deben calibrarse con actores locales.
+VALUE_BANDS = {"sin_dato": "No indicado", "bajo": "Menos de S/ 500", "medio": "S/ 500 a S/ 2 000",
+               "alto": "S/ 2 000 a S/ 10 000", "muy_alto": "Más de S/ 10 000"}
+
+# Pesos del índice de daño. Un robo menor vale 1; un robo de vehículo de alto valor vale 6 o más.
+# Son supuestos explícitos del demo (pendiente calibrar con expertos, p. ej. AHP), no un estándar.
+HARM_VALUE = {"sin_dato": 0, "bajo": 0, "medio": 1, "alto": 3, "muy_alto": 5}
+HARM_WEAPON = 3
+HARM_INJURY = 4
+CRITICAL_HARM = 6
+
 
 def now():
     return datetime.now(LIMA)
@@ -65,19 +76,55 @@ def dbscan(rows, eps=250, min_samples=4):
     return labels
 
 
+def value_band(report):
+    """Valor declarado; un robo de vehículo sin dato se asume al menos 'alto'."""
+    band = report.get('value_band') or 'sin_dato'
+    if band not in VALUE_BANDS:
+        band = 'sin_dato'
+    if band in {'sin_dato', 'bajo', 'medio'} and report.get('subtype') == 'vehiculo':
+        return 'alto'
+    return band
+
+
+def harm(report):
+    """Índice de daño del reporte: 1 base + valor perdido + violencia."""
+    parts = [
+        {"label": "Base", "points": 1},
+        {"label": "Valor de lo robado", "points": HARM_VALUE[value_band(report)]},
+        {"label": "Arma reportada", "points": HARM_WEAPON if report.get('weapon') else 0},
+        {"label": "Lesión reportada", "points": HARM_INJURY if report.get('injury') else 0},
+    ]
+    return {"score": sum(p['points'] for p in parts), "parts": parts}
+
+
+def critical_reasons(report):
+    """Motivos por los que un solo reporte merece alerta, sin esperar a que se acumulen."""
+    reasons = []
+    if report.get('injury'):
+        reasons.append('Lesión reportada')
+    if report.get('subtype') == 'vehiculo':
+        reasons.append('Robo de vehículo')
+    if value_band(report) == 'muy_alto' and report.get('subtype') != 'vehiculo':
+        reasons.append('Pérdida mayor a S/ 10 000')
+    if harm(report)['score'] >= CRITICAL_HARM and not reasons:
+        reasons.append(f'Índice de daño ≥ {CRITICAL_HARM}')
+    return reasons
+
+
 def priority(report, all_rows, clock=None):
     """Reglas ilustrativas para ordenar revisión, NO una predicción de delito."""
     clock = clock or now()
     event = parse_time(report['occurred_at'])
     age = max(0, (clock - event).total_seconds() / 3600)
-    recent = 20 if age <= 24 else 10 if age <= 168 else 0
+    recent = 15 if age <= 24 else 8 if age <= 168 else 0
     close = sum(1 for r in all_rows if r['id'] != report['id'] and r['status'] in VALID_STATUSES
                 and 0 <= (event - parse_time(r['occurred_at'])).total_seconds() <= 604800
                 and distance(report, r) <= 250)
     parts = [
         {"label": "Base de revisión", "points": 10},
-        {"label": "Arma reportada", "points": 40 if report['weapon'] else 0},
+        {"label": "Arma reportada", "points": 30 if report['weapon'] else 0},
         {"label": "Lesión reportada", "points": 15 if report['injury'] else 0},
+        {"label": "Valor de lo robado", "points": {"alto": 10, "muy_alto": 15, "medio": 5}.get(value_band(report), 0)},
         {"label": "Recencia del hecho", "points": recent},
         {"label": "Recurrencia cercana (7 días)", "points": min(15, close * 3)},
     ]
@@ -126,6 +173,7 @@ def statistics(rows, days=30, subtype='all', band='all', clock=None):
         if len(items) < 3:
             continue
         cells.append({"name": f"Celda {chr(65 + col)}{row + 1}", "count": len(items),
+                      "harm": sum(harm(r)['score'] for r in items),
                       "lat": BOUNDS['south'] + (row + .5) * step,
                       "lng": BOUNDS['west'] + (col + .5) * step, "step": step})
     cells.sort(key=lambda c: (-c['count'], c['name']))

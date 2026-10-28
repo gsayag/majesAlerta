@@ -16,7 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from analytics import BOUNDS, CENTER, TYPES, STATUSES, now, parse_time, statistics, priority, duplicate_candidates
+from analytics import (BOUNDS, CENTER, TYPES, STATUSES, VALUE_BANDS, now, parse_time, statistics, priority,
+                       duplicate_candidates, harm, critical_reasons)
 from insights import enhanced_statistics, management_metrics
 from evaluation import evaluate
 from store import init_db, all_reports, create_report, update_status, track, connect
@@ -55,6 +56,9 @@ def validate_report(data):
         raise ValueError('Usa una fecha pasada de los últimos 366 días.')
     if type(data.get('weapon')) is not bool or type(data.get('injury')) is not bool:
         raise ValueError('Los indicadores de arma y lesión deben ser sí o no.')
+    value = data.get('value_band', 'sin_dato')
+    if value not in VALUE_BANDS:
+        raise ValueError('Selecciona un rango válido para el valor de lo robado.')
     evidence = None
     if data.get('photo'):
         try:
@@ -64,7 +68,7 @@ def validate_report(data):
         if len(evidence) > 1000000 or not evidence.startswith(b'\xff\xd8\xff') or not evidence.endswith(b'\xff\xd9'):
             raise ValueError('Solo se admite una imagen JPEG de hasta 1 MB.')
     return dict(subtype=subtype, description=description.strip(), occurred_at=event.isoformat(),
-                lat=lat, lng=lng, weapon=data['weapon'], injury=data['injury'], evidence=evidence)
+                lat=lat, lng=lng, weapon=data['weapon'], injury=data['injury'], value_band=value, evidence=evidence)
 
 
 class AppServer(ThreadingHTTPServer):
@@ -157,7 +161,7 @@ class Handler(BaseHTTPRequestHandler):
             url = urlparse(self.path)
             path, query = url.path, parse_qs(url.query)
             if path == '/api/config':
-                return self.respond(200, {'bounds': BOUNDS, 'center': CENTER, 'types': TYPES, 'statuses': STATUSES, 'now': now().isoformat(), 'demo': True, 'google_maps_api_key': self.server.maps_key, 'map_provider': 'google' if self.server.maps_key else 'local', 'version': '2.0'})
+                return self.respond(200, {'bounds': BOUNDS, 'center': CENTER, 'types': TYPES, 'statuses': STATUSES, 'value_bands': VALUE_BANDS, 'now': now().isoformat(), 'demo': True, 'google_maps_api_key': self.server.maps_key, 'map_provider': 'google' if self.server.maps_key else 'local', 'version': '2.0'})
             if path == '/api/health':
                 return self.respond(200, {'ok': True, 'mode': 'local-demo'})
             if path in {'/api/stats', '/api/export.csv'}:
@@ -165,9 +169,9 @@ class Handler(BaseHTTPRequestHandler):
                 if path.endswith('.csv'):
                     stream = io.StringIO(newline='')
                     writer = csv.writer(stream)
-                    writer.writerow(['celda_ilustrativa', 'latitud_centro', 'longitud_centro', 'reportes_validados_ficticios', 'periodo_dias'])
+                    writer.writerow(['celda_ilustrativa', 'latitud_centro', 'longitud_centro', 'reportes_validados_ficticios', 'indice_dano', 'periodo_dias'])
                     for cell in result['cells']:
-                        writer.writerow([cell['name'], round(cell['lat'], 4), round(cell['lng'], 4), cell['count'], result['days']])
+                        writer.writerow([cell['name'], round(cell['lat'], 4), round(cell['lng'], 4), cell['count'], cell['harm'], result['days']])
                     return self.respond(200, '\ufeff' + stream.getvalue(), 'text/csv; charset=utf-8', {'Content-Disposition': 'attachment; filename="majes_datos_agregados_demo.csv"'})
                 return self.respond(200, result)
             if path == '/api/evaluate':
@@ -193,6 +197,7 @@ class Handler(BaseHTTPRequestHandler):
                         photo_ids = {row[0] for row in con.execute('SELECT report_id FROM evidence')}
                     reports = [{**{k: v for k, v in r.items() if k != 'tracking'},
                                 'priority': priority(r, rows), 'candidates': duplicate_candidates(r, rows),
+                                'harm': harm(r), 'critical': critical_reasons(r),
                                 'has_evidence': r['id'] in photo_ids} for r in rows]
                     return self.respond(200, {'reports': reports})
                 if path.startswith('/api/admin/evidence/'):

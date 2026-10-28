@@ -2,6 +2,9 @@ package com.example.majes_alerta.services
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -12,6 +15,7 @@ import com.example.majes_alerta.domain.ReportLocation
 import com.example.majes_alerta.domain.ReportPhoto
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -116,6 +120,38 @@ class DeviceService(private val context: Context) {
             uri = destinationFile.toURI().toString(),
             mimeType = mimeType
         )
+    }
+
+    /**
+     * Prepara la foto para la API: JPEG, lado mayor ≤ 1280 px y menos de ~950 KB, en Base64 sin prefijo.
+     * Devuelve null si no hay foto o no se pudo leer (el reporte se envía igual, sin imagen).
+     */
+    fun jpegBase64(photo: ReportPhoto?): String? {
+        if (photo == null) return null
+        return try {
+            val path = Uri.parse(photo.uri).path ?: return null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 1280) sample *= 2
+            val decoded = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+                ?: return null
+            val scale = minOf(1f, 1280f / maxOf(decoded.width, decoded.height))
+            val bitmap = if (scale < 1f) {
+                Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt(), (decoded.height * scale).toInt(), true)
+            } else decoded
+            var quality = 85
+            var bytes: ByteArray
+            do {
+                val out = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                bytes = out.toByteArray()
+                quality -= 15
+            } while (bytes.size > 950_000 && quality > 20)
+            if (bytes.size > 950_000) null else Base64.encodeToString(bytes, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun removePhoto(photo: ReportPhoto?) {

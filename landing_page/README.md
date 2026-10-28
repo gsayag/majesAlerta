@@ -46,6 +46,17 @@ La base anterior es compatible. Si contiene fechas antiguas puede haber filtros 
 
 Contraseña pública del demo: **`MajesDemo2026!`**. Cambiable con `DEMO_ADMIN_PASSWORD`. La protección de sesión es solo para demostración local, no para producción.
 
+## Conectar la app Android
+
+La app de `app_mobil` envía cada reporte nuevo a `POST /api/reports` y consulta su estado con `POST /api/track`. Los reportes llegan a `/gestion` como `recibido`.
+
+1. Inicia el servidor. Para el **emulador** basta `python3 server.py` (la app usa `http://10.0.2.2:8000`, que apunta a tu PC). Para un **celular físico** en la misma Wi-Fi: `python3 server.py --host 0.0.0.0` y en la app, *Ajustes → Dirección del servidor*, escribe `http://IP_DE_TU_PC:8000`.
+2. En la app, *Ajustes → Guardar y probar* confirma la conexión.
+3. Crea un reporte con el punto ficticio (la ubicación debe estar dentro del área de El Pedregal). Si no hay conexión queda **pendiente** y se reintenta al abrir la app o con *Enviar pendientes*.
+4. Valida el caso en `/gestion` y en la app toca *Actualizar estado*.
+
+Solo para demo: HTTP sin cifrar y sin cuentas. Un reintento tras un corte de red puede duplicar un reporte; la revisión lo marca como posible coincidencia.
+
 ## Mapas
 
 - **Sin clave:** calles reales de OpenStreetMap incluidas en `web/majes-streets.geojson`, dibujadas con Leaflet. Contiene 873 vías/tramos con geometría, no imágenes descargadas de un servidor de teselas. Esta base local funciona sin internet después de extraer el ZIP; cubre solo el área del demo, no todo el distrito.
@@ -67,7 +78,9 @@ Fuente y licencia de calles: `docs/CARTOGRAFIA.md`. No se incluye búsqueda de d
 - Recurrencia: bloques consecutivos de 7 días desde el inicio del filtro. Al menos 2 bloques con 3 o más reportes. El último bloque puede ser parcial. Valores espaciales previos de 0 a 2 se muestran como “Reservado”.
 - Mediana de revisión: primera transición diferente de recibido menos creación; se excluyen intervalos negativos y se muestra el número de registros usados. No equivale a atención policial ni tiempo de resolución.
 - Calidad: campos presentes, coordenadas dentro del área, foto opcional, duplicados confirmados / total de la cohorte por fecha del hecho. No mide verdad del reporte.
-- Prioridad: misma regla del demo anterior, máximo 100 (base 10, arma 40, lesión 15, recencia hasta 20, recurrencia cercana hasta 15). No es AHP aplicado ni un modelo entrenado.
+- Prioridad: máximo 100 (base 10, arma 30, lesión 15, valor de lo robado hasta 15, recencia hasta 15, recurrencia cercana hasta 15). No es AHP aplicado ni un modelo entrenado.
+- Índice de daño: 1 base + valor de lo robado (medio 1, alto 3, más de S/ 10 000: 5) + arma 3 + lesión 4. Un robo de vehículo sin valor indicado se asume alto.
+- Alertas para decidir (`/gestion-datos`): un reporte alerta solo si tiene lesión, es robo de vehículo o su daño es ≥ 6. Las zonas se ordenan por daño acumulado (media ≥ 6, alta ≥ 12); tres o más robos de bajo impacto quedan en vigilancia. Así un único robo de auto aparece aunque no haya otros reportes cerca, y dos robos de lentes no disparan una alerta. Los pesos son supuestos del demo para calibrar con expertos.
 
 ## Laboratorio
 

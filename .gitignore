@@ -1,0 +1,16 @@
+# IDE: configuración personal de cada integrante
+.idea/
+.vscode/
+*.iml
+
+# Claude Code (configuración local)
+.claude/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.env

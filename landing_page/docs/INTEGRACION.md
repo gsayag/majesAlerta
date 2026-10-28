@@ -1,6 +1,6 @@
 # Conectar la futura app móvil con la web
 
-Esta guía describe la siguiente implementación. **Las tecnologías de esta tabla no están instaladas ni conectadas en el demo local.** El ZIP usa HTML/CSS/JavaScript, Python estándar y SQLite para permitir una prueba sin servicios externos.
+Esta guía describe la siguiente implementación. **Las tecnologías de esta tabla no están instaladas en el demo local.** La app Android ya envía reportes al servidor Python del demo (`POST /api/reports`, `POST /api/track`); ver «Conectar la app Android» en el README. El ZIP usa HTML/CSS/JavaScript, Python estándar y SQLite para permitir una prueba sin servicios externos.
 
 ## Arquitectura propuesta y situación actual
 
@@ -44,10 +44,10 @@ En el móvil, `localhost` no es tu PC ni un servidor remoto. Durante desarrollo 
 | Método y ruta | Acceso | Entrada / salida principal |
 | --- | --- | --- |
 | `GET /api/config` | Público | Tipos de robo, área ilustrativa, fecha/hora del servidor y estados. |
-| `POST /api/reports` | Público, solo demo | Crea un reporte y entrega identificador + código privado. |
+| `POST /api/reports` | Público, solo demo | Crea un reporte y entrega identificador + código privado. Acepta `value_band` opcional: `sin_dato`, `bajo`, `medio`, `alto`, `muy_alto`. |
 | `GET /api/stats` | Público | Recibe `days=7/30/90`, `subtype=all/persona/negocio/vivienda/vehiculo`, `band=all/0/1/2/3`. Entrega conteos, serie temporal, franjas y celdas publicables. |
 | `GET /api/evaluate` | Público | Escenario sintético: `size`, `eps`, `min_samples` y `seed`; coincidencias, precisión, cobertura, F1 y tiempo. |
-| `GET /api/admin/metrics` | Revisor | Mismos filtros del panel; estados, prioridades, mediana de revisión y calidad. |
+| `GET /api/admin/metrics` | Revisor | Mismos filtros del panel; estados, prioridades, mediana de revisión, calidad y `alerts` (eventos graves y zonas por índice de daño). |
 | `GET /api/export.csv` | Público | Mismos filtros; descarga únicamente celdas agregadas. |
 | `POST /api/track` | Código privado | Consulta estado/historial sin mostrar detalles del hecho. |
 | `POST /api/login` | Credencial demo | Crea una sesión de revisión de 8 horas. |
@@ -67,6 +67,7 @@ Ejemplo de cuerpo de registro (reemplazar fecha/hora por una fecha pasada válid
   "lng": -72.187,
   "weapon": false,
   "injury": false,
+  "value_band": "medio",
   "consent": true,
   "photo": null
 }
