@@ -17,6 +17,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from analytics import BOUNDS, CENTER, TYPES, STATUSES, now, parse_time, statistics, priority, duplicate_candidates
+from insights import enhanced_statistics, management_metrics
+from evaluation import evaluate
 from store import init_db, all_reports, create_report, update_status, track, connect
 
 ROOT = Path(__file__).resolve().parent
@@ -70,11 +72,18 @@ class AppServer(ThreadingHTTPServer):
 
     def __init__(self, address, db, password):
         self.db, self.password, self.sessions, self.attempts = db, password, {}, {}
+        self.maps_key = os.environ.get('GOOGLE_MAPS_API_KEY', '')
+        maps_file = ROOT / 'maps.local.json'
+        if maps_file.exists():
+            try:
+                self.maps_key = self.maps_key or str(json.loads(maps_file.read_text(encoding='utf-8-sig')).get('google_maps_api_key',''))
+            except (ValueError, OSError):
+                print('No se pudo leer maps.local.json. Se usará OpenStreetMap.')
         super().__init__(address, Handler)
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'MajesDemo/1.0'
+    server_version = 'MajesDemo/2.0'
 
     def log_message(self, fmt, *args):
         # No registrar cuerpos ni códigos privados de seguimiento.
@@ -91,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'strict-origin-when-cross-origin')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'")
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.googleapis.com https://*.gstatic.com https://*.google.com; connect-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.google.com; worker-src 'self' blob:; frame-src https://*.google.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -148,11 +157,11 @@ class Handler(BaseHTTPRequestHandler):
             url = urlparse(self.path)
             path, query = url.path, parse_qs(url.query)
             if path == '/api/config':
-                return self.respond(200, {'bounds': BOUNDS, 'center': CENTER, 'types': TYPES, 'statuses': STATUSES, 'now': now().isoformat(), 'demo': True})
+                return self.respond(200, {'bounds': BOUNDS, 'center': CENTER, 'types': TYPES, 'statuses': STATUSES, 'now': now().isoformat(), 'demo': True, 'google_maps_api_key': self.server.maps_key, 'map_provider': 'google' if self.server.maps_key else 'local', 'version': '2.0'})
             if path == '/api/health':
                 return self.respond(200, {'ok': True, 'mode': 'local-demo'})
             if path in {'/api/stats', '/api/export.csv'}:
-                result = statistics(all_reports(self.server.db), *self.filters(query))
+                result = enhanced_statistics(all_reports(self.server.db), *self.filters(query))
                 if path.endswith('.csv'):
                     stream = io.StringIO(newline='')
                     writer = csv.writer(stream)
@@ -161,8 +170,21 @@ class Handler(BaseHTTPRequestHandler):
                         writer.writerow([cell['name'], round(cell['lat'], 4), round(cell['lng'], 4), cell['count'], result['days']])
                     return self.respond(200, '\ufeff' + stream.getvalue(), 'text/csv; charset=utf-8', {'Content-Disposition': 'attachment; filename="majes_datos_agregados_demo.csv"'})
                 return self.respond(200, result)
+            if path == '/api/evaluate':
+                try:
+                    params = [int(query.get(k, [v])[0]) for k,v in [('size','300'),('eps','250'),('min_samples','4'),('seed','42')]]
+                    result = evaluate(*params)
+                except (ValueError, TypeError):
+                    raise APIError(400, 'Usa 100, 300, 600 o 1000 puntos; radio de 50 a 1000 m y mínimo de 3 a 30.')
+                return self.respond(200, result)
             if path.startswith('/api/admin/'):
                 self.require_admin()
+                if path == '/api/admin/metrics':
+                    with connect(self.server.db) as con:
+                        histories = [dict(h) for h in con.execute('SELECT report_id,status,timestamp FROM history')]
+                        evidence = {r[0] for r in con.execute('SELECT report_id FROM evidence')}
+                    result = management_metrics(all_reports(self.server.db), histories, evidence, *self.filters(query))
+                    return self.respond(200, result)
                 if path == '/api/admin/session':
                     return self.respond(200, {'authenticated': True})
                 if path == '/api/admin/reports':
@@ -182,7 +204,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise APIError(404, 'No hay imagen para este reporte.')
             if path.startswith('/api/'):
                 raise APIError(404, 'Ruta no encontrada.')
-            routes = {'/', '/reportar', '/panel', '/gestion', '/seguimiento'}
+            routes = {'/', '/reportar', '/panel', '/gestion', '/seguimiento', '/gestion-datos', '/laboratorio', '/metodologia'}
             file = WEB / ('index.html' if path in routes else unquote(path).lstrip('/'))
             file = file.resolve()
             if WEB not in file.parents or not file.is_file():

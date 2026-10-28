@@ -1,3 +1,4 @@
+import {renderDashboard,renderPrivate,renderLab,renderMethod} from './analysis-ui.js';
 import {GeoMap} from './map.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -37,21 +38,21 @@ async function api(path, data) {
   return value;
 }
 function toast(text) {const el = $('#toast'); el.textContent = text; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(()=>el.classList.remove('show'),4500);}
-function map(el, opts = {}) {const instance = new GeoMap(el, {center:config.center,bounds:config.bounds,...opts}); activeMaps.push(instance); return instance;}
+function map(el, opts = {}) {const instance = new GeoMap(el, {center:config.center,bounds:config.bounds,googleKey:config.google_maps_api_key,...opts}); activeMaps.push(instance); return instance;}
 function go(path) {history.pushState({},'',path); render(); window.scrollTo(0,0);}
 function shell(route, content) {
-  const nav = [['/panel','grid','Panorama territorial'],['/reportar','plus','Reportar un robo'],['/seguimiento','search','Mi seguimiento'],['/gestion','shield','Revisar reportes']];
+  const nav = [['/panel','grid','Panorama territorial'],['/reportar','plus','Reportar un robo'],['/seguimiento','search','Mi seguimiento'],['/gestion','shield','Revisar reportes'],['/gestion-datos','chart','Gestión y calidad'],['/laboratorio','layers','Laboratorio DBSCAN'],['/metodologia','file','Metodología']];
   const title = nav.find(n=>n[0]===route)?.[2] || 'Majes Alerta';
   return `<aside class="sidebar">${brand()}<div class="navlabel">Observatorio ciudadano</div><nav class="side-nav" aria-label="Navegación principal">${nav.map(([url,i,label])=>`<a href="${url}" data-route class="${route===url?'active':''}" ${route===url?'aria-current="page"':''}>${icon(i)}${label}</a>`).join('')}</nav>
     <div class="sidebar-foot"><span class="pill">MAJES · AREQUIPA</span><p>Un proyecto universitario para transformar reportes en información útil.</p><a href="/" data-route class="text-link small">Conoce el proyecto ↗</a></div></aside>
-    <div class="workspace"><header class="app-top"><div class="crumb">Majes Alerta &nbsp; / &nbsp; <strong>${title}</strong></div><div class="row">${demo}<span class="userdot">MA</span></div></header><main id="main" class="main-inner">${content}</main></div>`;
+    <div class="workspace"><header class="app-top"><div class="crumb">Majes Alerta &nbsp; / &nbsp; <strong>${title}</strong></div><div class="row">${demo}<button class="btn secondary sm" data-present aria-pressed="${document.body.classList.contains('presentation')}">Modo presentación</button></div></header><main id="main" class="main-inner">${content}</main></div>`;
 }
 const title = (eyebrow, head, sub, action='') => `<div class="page-title"><div><div class="eyebrow">${eyebrow}</div><h1>${head}</h1><p>${sub}</p></div>${action}</div>`;
 
 async function landing(version) {
   $('#app').innerHTML = `<div class="landing"><header class="topnav">${brand()}<nav aria-label="Navegación"><a class="text-link" href="#como-funciona">Cómo funciona</a><a class="text-link" href="/panel" data-route>Explorar datos</a><a class="btn sm" href="/reportar" data-route>Reportar un robo ${icon('arrow')}</a></nav></header>
     <main id="main"><section class="hero"><div>${demo}<h1>Tu reporte puede<br>orientar el<br><em>siguiente paso.</em></h1><p class="hero-copy">Conectamos los reportes de robos con una mirada más clara de nuestro territorio. Información para comprender Majes y apoyar la prevención.</p>
-      <div class="actions"><a class="btn" href="/reportar" data-route>${icon('plus')} Crear un reporte</a><a class="btn secondary" href="/panel" data-route>Explorar el mapa ${icon('arrow')}</a></div><div class="hero-note">${icon('lock')} Sin nombres ni direcciones individuales en el mapa público.</div></div>
+      <div class="actions"><a class="btn" href="/reportar" data-route>${icon('plus')} Crear un reporte</a><a class="btn secondary" href="/panel" data-route>Explorar el observatorio ${icon('arrow')}</a></div><div class="hero-note">${icon('lock')} Sin nombres ni direcciones individuales en el mapa público.</div></div>
       <div class="hero-visual"><div class="row spread"><span class="small">UNA MIRADA AL TERRITORIO</span>${icon('layers')}</div><div id="hero-map" class="hero-map"></div><div class="hero-bottom"><span class="iconbox">${icon('chart')}</span><div><strong>Detrás de cada punto, una oportunidad</strong><p>Ubicación + tiempo + revisión humana</p></div></div><div class="hero-float">Reportes que orientan. Personas que deciden.</div></div></section>
       <div class="landing-strip"><span>${icon('pin')} Majes, Caylloma, Arequipa</span><span>${icon('shield')} Alcance: únicamente robos</span><span>${icon('layers')} Análisis de datos agregados</span><span>${icon('file')} Prototipo académico</span></div>
       <section class="landing-section" id="como-funciona"><div class="section-intro"><div><div class="eyebrow">Del reporte a la información</div><h2>Una conexión con propósito.</h2></div><p>El valor aparece cuando los reportes se revisan, se relacionan y se convierten en evidencia para decidir.</p></div><div class="steps"><article class="step"><span class="step-num">01</span><h3>Reporta desde tu celular</h3><p>Registra qué ocurrió, cuándo y dónde. Recibe un código privado para consultar el estado.</p></article><article class="step"><span class="step-num">02</span><h3>Revisa la información</h3><p>Una persona valida el reporte y examina posibles duplicados. Cada prioridad tiene una explicación.</p></article><article class="step"><span class="step-num">03</span><h3>Comprende los patrones</h3><p>Explora concentraciones, horarios y cambios entre periodos. El mapa muestra reportes, no predicciones.</p></article></div></section>
@@ -67,45 +68,8 @@ function filterMarkup() {
     <label><span>FRANJA HORARIA · PERÚ</span><select id="filter-band" aria-label="Franja horaria"><option value="all">Todos los horarios</option>${bands.map((b,i)=>`<option value="${i}">${b}</option>`).join('')}</select></label><button class="btn secondary sm refresh" id="refresh">${icon('refresh')} Actualizar</button></div>`;
 }
 
-async function dashboard(version) {
-  $('#app').innerHTML = shell('/panel',title('OBSERVATORIO / DATOS ABIERTOS','Panorama territorial','Explora los reportes de robos validados del área ilustrativa de Majes.',`<a id="export" href="/api/export.csv?${query()}" class="btn secondary sm">${icon('download')} Exportar CSV</a>`)+filterMarkup()+
-    `<div id="dashboard-error" class="error" role="alert"></div><div class="metrics" id="metrics"><div class="empty">Cargando indicadores…</div></div>
-    <div class="dashboard-grid"><section class="panel map-panel"><div class="panel-head"><div><h3>Mapa de concentraciones</h3><p class="muted small">Reportes agrupados · ubicaciones aproximadas</p></div><div class="segmented" aria-label="Visualización del mapa"><button class="active" data-layer="heat" aria-pressed="true">Calor</button><button data-layer="cells" aria-pressed="false">Celdas</button></div></div><div id="heat-map" class="heatmap"></div><div class="map-footer"><span id="map-coverage">Calculando cobertura…</span><div class="legend">Menor <span class="gradient"></span> Mayor concentración</div></div></section>
-    <div class="analysis-column stack"><section class="analysis-card" id="insight"></section><section class="panel"><div class="panel-head"><div><h3>Concentración por celda</h3><p class="small muted">Celdas ilustrativas, no barrios</p></div>${icon('pin')}</div><div id="zones" class="panel-body" style="padding-top:0"></div></section></div></div>
-    <div class="chart-grid"><section class="panel"><div class="panel-head"><div><h3>Evolución de reportes</h3><p class="small muted">Fecha del hecho · reportes validados</p></div>${icon('chart')}</div><div class="chart-body" id="timeline-chart"></div></section><section class="panel"><div class="panel-head"><div><h3>¿En qué horarios se reportan?</h3><p class="small muted">Hora del hecho · UTC−5</p></div>${icon('clock')}</div><div class="chart-body bar-list" id="hour-bars"></div></section></div>
-    <p class="data-note">Datos completamente ficticios. Una concentración de reportes no equivale a una tasa de criminalidad ni a una predicción. Solo ingresan reportes validados o cerrados; la revisión no certifica judicialmente un hecho. La cuadrícula pública oculta celdas con menos de 3 reportes.</p>`);
-  const m = map($('#heat-map'));
-  $$('[data-layer]').forEach(b=>b.addEventListener('click',()=>{$$('[data-layer]').forEach(el=>{el.classList.toggle('active',el===b);el.setAttribute('aria-pressed',el===b?'true':'false');});m.setLayer(b.dataset.layer);}));
-  let request = 0;
-  async function refresh() {
-    const current = ++request;
-    $('#refresh').disabled = true; $('#dashboard-error').textContent = '';
-    try {
-      const s = await api('/api/stats?' + query());
-      if (version!==renderVersion || current!==request) return;
-      $('#export').href = '/api/export.csv?' + query();
-      const delta = s.change_pct === null ? 'Sin base previa para comparar' : `${s.change_pct>0?'+':''}${s.change_pct}% frente al periodo anterior`;
-      const cards = [
-        ['Reportes validados',s.total,delta,'file',true],
-        ['Concentraciones detectadas',s.clusters,'DBSCAN · radio 250 m · mínimo 4','layers',false],
-        ['Franja con más reportes',s.peak_band===null?'Sin datos':bands[s.peak_band].slice(0,5)+' h','Mayor frecuencia dentro del filtro','clock',false],
-        ['Reportes en mapa público',s.visible_reports,`${s.suppressed_reports} fuera de celdas publicables`,'shield',false],
-      ];
-      $('#metrics').innerHTML = cards.map(([label,val,detail,i,em])=>`<article class="metric ${em?'emphasis':''}"><div class="metric-top">${label}${icon(i)}</div><div class="metric-value">${val}</div><small>${detail}</small></article>`).join('');
-      m.setCells(s.cells);
-      $('#map-coverage').textContent = `${s.cells.length} celdas visibles · ${s.days} días · toca una concentración`;
-      $('#insight').innerHTML = `<div class="row spread"><span class="eyebrow">Lectura del periodo</span>${icon('chart')}</div><h3>${s.total ? 'La hora también cuenta.' : 'Aún no hay datos.'}</h3><p>${s.total ? `La franja <strong>${bands[s.peak_band]}</strong> reúne ${s.hours[s.peak_band]} de ${s.total} reportes validados. Es una señal para revisar el contexto de los hechos y orientar una evaluación preventiva.` : 'Prueba otro filtro o valida un reporte desde el área de revisión.'}</p><div class="method">${icon('shield')} Análisis descriptivo. La decisión requiere revisión humana.</div>`;
-      $('#zones').innerHTML = s.cells.length ? s.cells.slice(0,4).map((c,i)=>`<div class="zone-item"><div class="row"><span class="zone-rank">0${i+1}</span><div><div class="zone-name">${esc(c.name)}</div><small>Ubicación agrupada</small></div></div><span class="zone-count">${c.count}</span></div>`).join('') : '<div class="empty">No hay celdas con al menos 3 reportes.</div>';
-      const maxHour = Math.max(1,...s.hours);
-      $('#hour-bars').innerHTML = s.hours.map((n,i)=>`<div><div class="bar-label"><span>${bands[i]}</span><strong>${n}</strong></div><div class="bar-track"><div style="width:${n/maxHour*100}%"></div></div></div>`).join('');
-      $('#timeline-chart').innerHTML = lineChart(s.timeline);
-    } catch(e) {if (version===renderVersion && current===request) $('#dashboard-error').textContent = e.message;}
-    finally {if (version===renderVersion && current===request) $('#refresh').disabled = false;}
-  }
-  for (const key of ['days','subtype','band']) {const input=$('#filter-'+key);input.value=filters[key];input.addEventListener('change',()=>{filters[key]=input.value;refresh();});}
-  $('#refresh').addEventListener('click',refresh);
-  await refresh();
-}
+function context(version){return {shell,title,filterMarkup,api,map,filters,query,config,bands,toast,active:()=>version===renderVersion};}
+async function dashboard(version){await renderDashboard(context(version));}
 
 function lineChart(data) {
   const w=620,h=150,left=28,top=12,bottom=124,max=Math.max(1,...data.map(d=>d.count));
@@ -223,10 +187,11 @@ async function render() {
   const version=++renderVersion,route=location.pathname.replace(/\/$/,'')||'/';
   document.title=({ '/':'Majes Alerta · Reportes que orientan','/panel':'Panorama territorial · Majes Alerta','/reportar':'Reportar un robo · Majes Alerta','/gestion':'Revisar reportes · Majes Alerta','/seguimiento':'Seguimiento · Majes Alerta'})[route]||'Majes Alerta';
   try {
-    if(route==='/')await landing(version);else if(route==='/panel')await dashboard(version);else if(route==='/reportar')report();else if(route==='/seguimiento')tracking();else if(route==='/gestion')await management(version);else go('/');
+    if(route==='/')await landing(version);else if(route==='/panel')await dashboard(version);else if(route==='/reportar')report();else if(route==='/seguimiento')tracking();else if(route==='/gestion')await management(version);else if(route==='/gestion-datos')await renderPrivate(context(version));else if(route==='/laboratorio')await renderLab(context(version));else if(route==='/metodologia')renderMethod(context(version));else go('/');
   }catch(e){if(version===renderVersion)$('#app').innerHTML=shell(route,`<div class="error">${esc(e.message)}</div><p style="margin-top:20px"><a href="/" data-route>Volver al inicio</a></p>`);}
 }
 
-document.addEventListener('click',ev=>{const a=ev.target.closest('a[data-route]');if(!a||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey||ev.button!==0)return;ev.preventDefault();go(a.getAttribute('href'));});
+document.addEventListener('click',ev=>{const present=ev.target.closest('[data-present]');if(present){const on=document.body.classList.toggle('presentation');present.setAttribute('aria-pressed',String(on));localStorage.setItem('majes-present',String(on));window.dispatchEvent(new Event('resize'));return;}const a=ev.target.closest('a[data-route]');if(!a||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey||ev.button!==0)return;ev.preventDefault();go(a.getAttribute('href'));});
 window.addEventListener('popstate',render);
+if(localStorage.getItem('majes-present')==='true')document.body.classList.add('presentation');
 try {config=await api('/api/config');await render();}catch(e){$('#app').innerHTML=`<main class="success-card"><h1>No se pudo conectar.</h1><p>${esc(e.message)}</p><p>Ejecuta INICIAR_WINDOWS.bat o python server.py y abre http://127.0.0.1:8000. No abras index.html directamente.</p></main>`;}

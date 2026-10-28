@@ -3,16 +3,22 @@ import json
 import random
 import secrets
 import sqlite3
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from analytics import now, TYPES
 
 
+@contextmanager
 def connect(path):
     con = sqlite3.connect(path, timeout=10)
     con.row_factory = sqlite3.Row
     con.execute('PRAGMA foreign_keys=ON')
-    return con
+    try:
+        with con:
+            yield con
+    finally:
+        con.close()
 
 
 def init_db(path, seed=True):

@@ -158,6 +158,22 @@ class APITests(unittest.TestCase):
         self.request('/api/logout',{},cookie)
         self.assertEqual(self.request('/api/admin/session',cookie=cookie)[0],401)
 
+    def test_new_private_metrics_require_session(self):
+        self.assertEqual(self.request('/api/admin/metrics')[0],401)
+        status,data,_=self.request('/api/admin/metrics',cookie=self.login())
+        self.assertEqual(status,200)
+        self.assertIn('quality',data)
+        self.assertNotIn('description',json.dumps(data))
+
+    def test_laboratory_is_controlled_and_does_not_change_database(self):
+        before=len(all_reports(self.db))
+        status,data,_=self.request('/api/evaluate?size=100&eps=250&min_samples=4&seed=42')
+        self.assertEqual(status,200);self.assertEqual(len(data['points']),100)
+        self.assertEqual(len(all_reports(self.db)),before)
+        self.assertEqual(self.request('/api/evaluate?size=100000')[0],400)
+        self.assertEqual(self.request('/api/evaluate?eps=nan')[0],400)
+
+
 
 class PersistenceTests(unittest.TestCase):
     def test_reopen_preserves_data_and_audit(self):

@@ -2,22 +2,22 @@
 
 Esta guía describe la siguiente implementación. **Las tecnologías de esta tabla no están instaladas ni conectadas en el demo local.** El ZIP usa HTML/CSS/JavaScript, Python estándar y SQLite para permitir una prueba sin servicios externos.
 
-## Arquitectura propuesta, alineada con el artículo
+## Arquitectura propuesta y situación actual
 
 | Parte | Herramienta propuesta | Función |
 | --- | --- | --- |
-| App Android/iOS | React Native con Expo | Formulario móvil, permisos, captura de ubicación e imagen y seguimiento. |
+| App Android | Kotlin/Gradle en tu proyecto actual | Mantener el formulario móvil, permisos, ubicación, imagen y seguimiento; conectar su capa de datos a la API. Expo fue una alternativa preliminar del artículo. |
 | Landing y panel | Next.js | Presentación pública, filtros, gráficos y área de revisión. |
-| Mapas | Leaflet + proveedor de cartografía | Capas, celdas, marcadores y visualización del calor. |
+| Mapas | Leaflet local o Google Maps, ya implementados en esta web | Capas, celdas, marcadores y visualización del calor. |
 | API compartida | Python con FastAPI | Validar solicitudes, aplicar roles y servir datos públicos/privados. |
 | Análisis | Python y scikit-learn | DBSCAN y evaluación de parámetros; después, comparación con una línea base. |
 | Datos | Supabase, PostgreSQL y PostGIS | Persistencia, consultas espaciales e índices geográficos. |
 | Identidad y archivos | Supabase Auth y Storage privado | Cuentas con roles y evidencias mediante accesos temporales autorizados. |
-| Desarrollo | VS Code, Git/GitHub, Expo Go y emulador Android | Código compartido, control de versiones y pruebas. |
+| Desarrollo | VS Code, Android Studio, Git/GitHub y emulador Android | Código compartido, control de versiones y pruebas. |
 
 ```mermaid
 flowchart TD
-  M["App móvil · Expo"] --> A["API compartida · FastAPI"]
+  M["App Android · Kotlin"] --> A["API compartida · FastAPI"]
   W["Landing y panel · Next.js"] --> A
   A --> D["PostgreSQL + PostGIS"]
   A --> P["Motor de análisis"]
@@ -30,7 +30,7 @@ La app no se conecta al archivo HTML de la landing. La app y el panel llaman al 
 ## Recorrido de un dato
 
 1. La persona inicia sesión en la app, permite obtener una ubicación puntual y confirma dónde ocurrió el hecho. No se necesita rastreo continuo en segundo plano.
-2. Expo envía un JSON a `POST https://TU_API/api/reports` y una credencial de sesión válida. La evidencia se transfiere a un almacenamiento privado autorizado.
+2. La app Android envía un JSON a `POST https://TU_API/api/reports` y una credencial de sesión válida. La evidencia se transfiere a un almacenamiento privado autorizado.
 3. FastAPI verifica el token y los campos, asigna el estado inicial `recibido` y guarda el reporte en PostgreSQL. Las coordenadas se guardan también en un campo geográfico PostGIS con índice espacial.
 4. La persona revisora accede al panel con su propio rol, examina la información y sus posibles coincidencias, y registra la decisión en un historial.
 5. Python procesa reportes elegibles y actualiza los agregados del periodo. DBSCAN usa metros o una métrica geográfica correcta; no se deben tratar grados como metros.
@@ -46,6 +46,8 @@ En el móvil, `localhost` no es tu PC ni un servidor remoto. Durante desarrollo 
 | `GET /api/config` | Público | Tipos de robo, área ilustrativa, fecha/hora del servidor y estados. |
 | `POST /api/reports` | Público, solo demo | Crea un reporte y entrega identificador + código privado. |
 | `GET /api/stats` | Público | Recibe `days=7/30/90`, `subtype=all/persona/negocio/vivienda/vehiculo`, `band=all/0/1/2/3`. Entrega conteos, serie temporal, franjas y celdas publicables. |
+| `GET /api/evaluate` | Público | Escenario sintético: `size`, `eps`, `min_samples` y `seed`; coincidencias, precisión, cobertura, F1 y tiempo. |
+| `GET /api/admin/metrics` | Revisor | Mismos filtros del panel; estados, prioridades, mediana de revisión y calidad. |
 | `GET /api/export.csv` | Público | Mismos filtros; descarga únicamente celdas agregadas. |
 | `POST /api/track` | Código privado | Consulta estado/historial sin mostrar detalles del hecho. |
 | `POST /api/login` | Credencial demo | Crea una sesión de revisión de 8 horas. |
@@ -76,9 +78,9 @@ Ejemplo de cuerpo de registro (reemplazar fecha/hora por una fecha pasada válid
 
 1. Formalizar alcance: solo robos en Majes, datos mínimos, roles y estados. Corregir el título del artículo que aún incluye hurtos y el párrafo ajeno sobre residuos sólidos.
 2. Migrar el esquema a PostgreSQL/PostGIS y crear pruebas de acceso. Separar datos de prueba de datos reales con entornos distintos.
-3. Implementar autenticación y autorización en FastAPI; aplicar RLS cuando se expongan tablas por Supabase. La clave `service_role` nunca debe ir en Expo ni en el JavaScript del navegador.
-4. Implementar primero el flujo móvil de reporte y seguimiento en Expo, reutilizando las reglas de validación y el contrato de API.
-5. Migrar landing/panel a Next.js y reemplazar el mapa ligero por Leaflet. Seleccionar cartografía y un proveedor apropiados al tráfico esperado; OpenStreetMap y la biblioteca Leaflet son componentes diferentes.
+3. Implementar autenticación y autorización en FastAPI; aplicar RLS cuando se expongan tablas por Supabase. La clave `service_role` nunca debe ir en la app Android ni en el JavaScript del navegador.
+4. Conectar el flujo de reporte y seguimiento de tu app Android Kotlin, reutilizando las reglas de validación y el contrato de API. No hace falta migrar a Expo.
+5. Mantener el panel modular o migrarlo a Next.js si el alcance lo justifica. Leaflet y el adaptador Google ya están implementados; seleccionar la cartografía y el proveedor adecuados al tráfico esperado.
 6. Incorporar evidencia privada, validación de imagen en servidor, límites de carga, rate limiting, prevención de abuso y auditoría por usuario.
 7. Calibrar DBSCAN y la prioridad con escenarios de referencia y revisión de especialistas. Separar la prioridad operativa de la calidad o completitud del registro.
 8. Ejecutar un piloto consentido y autorizado, con políticas de publicación, conservación y eliminación definidas para los datos realmente recogidos.
@@ -88,7 +90,7 @@ Ejemplo de cuerpo de registro (reemplazar fecha/hora por una fecha pasada válid
 | Mejora | Resultado que aporta | Cómo verificarla |
 | --- | --- | --- |
 | Calidad y duplicados | Menos distorsión en las estadísticas. | Precisión/recall sobre pares de reportes etiquetados manualmente. |
-| Comparación temporal | Identificar cambios en las concentraciones reportadas. | Periodos comparables, tamaño de muestra y revisión del subregistro. |
+| Comparación temporal (ya implementada; falta validar con datos de campo) | Identificar cambios en los reportes. | Periodos comparables, tamaño de muestra y revisión del subregistro. |
 | Acciones preventivas registradas | Conectar la información con decisiones documentadas. | Relacionar zona/periodo, acción, responsable y seguimiento; no atribuir causalidad automáticamente. |
 | Modo sin conexión | Facilitar el registro donde hay conectividad intermitente. | Cola local, reintentos, confirmación de recepción e idempotencia. |
 | Seguimiento y avisos | Dar visibilidad al proceso de revisión. | Entrega de notificaciones y comprensión del estado por participantes. |
