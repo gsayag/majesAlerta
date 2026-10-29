@@ -38,6 +38,7 @@ Tu tarea es interpretar los datos y decirle a quien administra dónde y cómo ac
 - Para cada zona da un diagnóstico breve que cite las cifras (reportes, índice de daño, franja, figura legal predominante) y de 2 a 4 acciones preventivas concretas, con responsable (Serenazgo, PNP, Municipalidad, juntas vecinales, comerciantes) y momento (días y franja).
 - Ajusta la acción al patrón: los robos con violencia piden presencia policial y patrullaje en la franja crítica; los hurtos piden prevención situacional (iluminación, cámaras, cierre de accesos, campañas de cuidado de pertenencias); los hechos contra vehículos piden control de estacionamientos y puntos de control; los de vivienda, coordinación con juntas vecinales.
 - Propón un indicador simple para comprobar en 4 semanas si la acción funcionó.
+- Revisa las acciones ya registradas y su resultado medido. No repitas una acción que ya está en curso en la misma zona: si funciona, recomienda mantenerla; si los reportes aumentaron o no se distingue efecto, propón ajustarla o cambiarla. Recuerda que el resultado es descriptivo y no prueba causalidad.
 - Señala los patrones generales (días, horas, tendencia frente al periodo anterior) y las limitaciones: muestras pequeñas, reportes sin revisar y que los reportes ciudadanos tienen subregistro.
 
 No predigas quién cometerá delitos, no señales personas ni grupos sociales y no recomiendes medidas que vulneren derechos. Si los datos son escasos, dilo y recomienda recolectar más antes de mover recursos. Escribe en español claro y directo, sin jerga."""
@@ -77,7 +78,7 @@ def ai_available():
     return anthropic is not None
 
 
-def build_context(rows, days=30, subtype='all', band='all', family='all', clock=None):
+def build_context(rows, days=30, subtype='all', band='all', family='all', clock=None, actions=None):
     """Resumen agregado que se envía a la IA. Sin texto libre ni datos individuales."""
     clock = clock or now()
     s = enhanced_statistics(rows, days, subtype, band, clock)
@@ -123,6 +124,11 @@ def build_context(rows, days=30, subtype='all', band='all', family='all', clock=
                                  'franja_principal': BANDS[c['hours'].index(max(c['hours']))]}
                                 for c in s['cluster_details']],
         'eventos_graves': {'total': alerts['individual_total'], 'sin_revisar': alerts['individual_pending']},
+        'acciones_registradas': [{'zona': a['zone'], 'accion': a['title'], 'responsable': a['responsible'],
+                                  'estado': a['status'], 'desde': a['start_date'], 'hasta': a['end_date'],
+                                  'franja': a['band_label'], 'resultado': a['evaluation']['verdict'],
+                                  'reportes_antes': a['evaluation'].get('before'), 'reportes_durante': a['evaluation'].get('after')}
+                                 for a in (actions or []) if a['status'] != 'cancelada'][:15],
     }
 
 
@@ -183,6 +189,12 @@ def rules_analysis(context):
         if z['semanas_con_3_o_mas'] >= 2:
             actions.append({'accion': 'Mantener la intervención al menos 4 semanas: el patrón es recurrente',
                             'responsable': 'Municipalidad', 'cuando': 'Próximas 4 semanas'})
+        current = [a for a in context['acciones_registradas'] if a['zona'] == z['zona'] and a['estado'] in {'en_curso', 'planificada'}]
+        if current:
+            a = current[0]
+            keep = 'Mantener' if 'más que en el resto' in a['resultado'] else 'Revisar y ajustar'
+            actions.insert(0, {'accion': f"{keep}: {a['accion']} ({a['resultado']})", 'responsable': a['responsable'],
+                               'cuando': f"Hasta {a['hasta']}"})
         level = 'alta' if z['nivel_por_reglas'] == 'alta' else 'media' if z['nivel_por_reglas'] == 'media' else 'baja'
         figure = next(iter(z['figuras_legales']), 'sin figura')
         zones.append({
@@ -214,18 +226,19 @@ def rules_analysis(context):
     return {'resumen': summary, 'zonas_prioritarias': zones, 'patrones': patterns, 'limitaciones': limits}
 
 
-def _fingerprint(rows):
-    data = sorted((r['id'], r['status'], r.get('legal_class') or '') for r in rows)
+def _fingerprint(rows, actions):
+    data = [sorted((r['id'], r['status'], r.get('legal_class') or '') for r in rows),
+            sorted((a['id'], a['status']) for a in actions or [])]
     return hashlib.sha256(json.dumps(data).encode()).hexdigest()[:16]
 
 
-def analyze(rows, days=30, subtype='all', band='all', family='all', refresh=False, clock=None):
-    key = (days, subtype, band, family, _fingerprint(rows))
+def analyze(rows, days=30, subtype='all', band='all', family='all', refresh=False, clock=None, actions=None):
+    key = (days, subtype, band, family, _fingerprint(rows, actions))
     with _lock:
         hit = _cache.get(key)
         if hit and not refresh and time.time() - hit['_at'] < CACHE_SECONDS:
             return {**{k: v for k, v in hit.items() if k != '_at'}, 'cached': True}
-        context = build_context(rows, days, subtype, band, family, clock)
+        context = build_context(rows, days, subtype, band, family, clock, actions)
         source, model, notice = 'reglas', None, None
         if not context['zonas']:
             analysis = rules_analysis(context)

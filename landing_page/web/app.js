@@ -1,4 +1,5 @@
 import {renderDashboard,renderPrivate,renderLab,renderMethod,renderAI} from './analysis-ui.js';
+import {renderActions} from './actions-ui.js';
 import {GeoMap} from './map.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -41,7 +42,7 @@ function toast(text) {const el = $('#toast'); el.textContent = text; el.classLis
 function map(el, opts = {}) {const instance = new GeoMap(el, {center:config.center,bounds:config.bounds,googleKey:config.google_maps_api_key,...opts}); activeMaps.push(instance); return instance;}
 function go(path) {history.pushState({},'',path); render(); window.scrollTo(0,0);}
 function shell(route, content) {
-  const nav = [['/panel','grid','Panorama territorial'],['/reportar','plus','Reportar un hecho'],['/seguimiento','search','Mi seguimiento'],['/gestion','shield','Revisar reportes'],['/gestion-datos','chart','Gestión y calidad'],['/analisis','target','Análisis con IA'],['/laboratorio','layers','Laboratorio DBSCAN'],['/metodologia','file','Metodología']];
+  const nav = [['/panel','grid','Panorama territorial'],['/reportar','plus','Reportar un hecho'],['/seguimiento','search','Mi seguimiento'],['/gestion','shield','Revisar reportes'],['/gestion-datos','chart','Gestión y calidad'],['/analisis','target','Análisis con IA'],['/acciones','check','Seguimiento de acciones'],['/laboratorio','layers','Laboratorio DBSCAN'],['/metodologia','file','Metodología']];
   const title = nav.find(n=>n[0]===route)?.[2] || 'Majes Alerta';
   return `<aside class="sidebar">${brand()}<div class="navlabel">Observatorio ciudadano</div><nav class="side-nav" aria-label="Navegación principal">${nav.map(([url,i,label])=>`<a href="${url}" data-route class="${route===url?'active':''}" ${route===url?'aria-current="page"':''}>${icon(i)}${label}</a>`).join('')}</nav>
     <div class="sidebar-foot"><span class="pill">MAJES · AREQUIPA</span><p>Un proyecto universitario para transformar reportes en información útil.</p><a href="/" data-route class="text-link small">Conoce el proyecto ↗</a></div></aside>
@@ -190,9 +191,9 @@ async function review(version) {
 async function render() {
   activeMaps.forEach(m=>m.destroy());activeMaps=[];
   const version=++renderVersion,route=location.pathname.replace(/\/$/,'')||'/';
-  document.title=({ '/':'Majes Alerta · Reportes que orientan','/panel':'Panorama territorial · Majes Alerta','/reportar':'Reportar un robo o hurto · Majes Alerta','/analisis':'Análisis con IA · Majes Alerta','/gestion':'Revisar reportes · Majes Alerta','/seguimiento':'Seguimiento · Majes Alerta'})[route]||'Majes Alerta';
+  document.title=({ '/':'Majes Alerta · Reportes que orientan','/panel':'Panorama territorial · Majes Alerta','/reportar':'Reportar un robo o hurto · Majes Alerta','/analisis':'Análisis con IA · Majes Alerta','/acciones':'Seguimiento de acciones · Majes Alerta','/gestion':'Revisar reportes · Majes Alerta','/seguimiento':'Seguimiento · Majes Alerta'})[route]||'Majes Alerta';
   try {
-    if(route==='/')await landing(version);else if(route==='/panel')await dashboard(version);else if(route==='/reportar')report();else if(route==='/seguimiento')tracking();else if(route==='/gestion')await management(version);else if(route==='/gestion-datos')await renderPrivate(context(version));else if(route==='/analisis')await renderAI(context(version));else if(route==='/laboratorio')await renderLab(context(version));else if(route==='/metodologia')renderMethod(context(version));else go('/');
+    if(route==='/')await landing(version);else if(route==='/panel')await dashboard(version);else if(route==='/reportar')report();else if(route==='/seguimiento')tracking();else if(route==='/gestion')await management(version);else if(route==='/gestion-datos')await renderPrivate(context(version));else if(route==='/analisis')await renderAI(context(version));else if(route==='/acciones')await renderActions(context(version));else if(route==='/laboratorio')await renderLab(context(version));else if(route==='/metodologia')renderMethod(context(version));else go('/');
   }catch(e){if(version===renderVersion)$('#app').innerHTML=shell(route,`<div class="error">${esc(e.message)}</div><p style="margin-top:20px"><a href="/" data-route>Volver al inicio</a></p>`);}
 }
 

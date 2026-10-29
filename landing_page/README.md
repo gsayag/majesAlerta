@@ -40,6 +40,7 @@ La base anterior es compatible. Si contiene fechas antiguas puede haber filtros 
 | `/gestion` | Revisión privada | Prioridad explicable, figura legal sugerida y confirmable, coincidencias, validación, duplicado, descarte y cierre. |
 | `/gestion-datos` | Gestión y calidad privada | Estados, prioridades, pendientes, mediana hasta primera revisión y calidad de campos/evidencias. |
 | `/analisis` | Análisis con IA privado | La IA interpreta los datos y propone dónde actuar, qué hacer, quién y cuándo, con un indicador para medirlo. |
+| `/acciones` | Seguimiento privado | Acciones preventivas registradas (desde la IA o a mano), estado, notas y evaluación antes/durante frente al resto del área. |
 | `/laboratorio` | Laboratorio público sintético | Radio/mínimo configurables, semilla, escenarios conocidos, cobertura, precisión, F1 y tiempos por tamaño. |
 | `/metodologia` | Criterios | Cómo leer las métricas y activar Google Maps. |
 | `/reportar` | Formulario web de prueba | Registro de un caso ficticio. El canal normal del ciudadano es la app Android; la web es sobre todo para administración. |
@@ -87,6 +88,18 @@ Quien reporta no elige el artículo. Responde preguntas simples (¿hubo violenci
 - Cada análisis se guarda 30 minutos por filtro y datos; «Regenerar» fuerza uno nuevo. Cada llamada a la IA consume créditos de la API.
 - Las recomendaciones requieren criterio humano: no predicen delitos ni señalan personas.
 
+## Seguimiento de acciones
+
+Cierra el ciclo **dato → decisión → resultado**. En `/analisis` cada acción recomendada tiene un botón «Registrar»; también se puede registrar a mano en `/acciones` (zona, acción, responsable, fechas y franja). Por defecto dura 4 semanas.
+
+Cómo se evalúa (`actions.py`):
+- Se cuentan los reportes **validados** de la zona (y de la franja, si se eligió) durante la acción y en el mismo número de días justo antes de empezar.
+- Ese cambio se compara con el **resto del área** en las mismas fechas. Si todo bajó por igual, no se atribuye la baja a la acción.
+- Veredictos: muy pronto (menos de 7 días), pocos datos (menos de 5 reportes), aumentaron, bajaron más que el resto, bajaron como el resto, sin cambio.
+- Es una lectura descriptiva para decidir si mantener, ajustar o cambiar la acción: **no prueba causalidad**.
+
+La IA recibe las acciones registradas y su resultado, para no repetir lo que ya se hace y proponer ajustes donde no funciona.
+
 ## Mapas
 
 - **Sin clave:** calles reales de OpenStreetMap incluidas en `web/majes-streets.geojson`, dibujadas con Leaflet. Contiene 873 vías/tramos con geometría, no imágenes descargadas de un servidor de teselas. Esta base local funciona sin internet después de extraer el ZIP; cubre solo el área del demo, no todo el distrito.
@@ -133,6 +146,8 @@ El escenario no cambia la base de reportes ni se mezcla con las estadísticas. S
 - `insights.py`: agregados públicos, gestión privada y alertas por gravedad.
 - `legal.py`: clasificación orientativa hurto/robo según el Código Penal.
 - `ai_analysis.py`: interpretación con IA (Claude) y análisis por reglas de respaldo.
+- `actions.py`: acciones preventivas y evaluación antes/durante frente al resto del área.
+- `web/actions-ui.js`: página de seguimiento de acciones.
 - `evaluation.py`: escenarios y métricas de referencia.
 - `web/app.js`: navegación, portada y flujo de reportes.
 - `web/analysis-ui.js`: paneles analíticos y laboratorio.

@@ -52,6 +52,12 @@ def init_db(path, seed=True):
             status TEXT NOT NULL, timestamp TEXT NOT NULL, note TEXT NOT NULL,
             FOREIGN KEY (report_id) REFERENCES reports(id));
           CREATE INDEX IF NOT EXISTS reports_time ON reports(occurred_at);
+          CREATE TABLE IF NOT EXISTS actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, zone TEXT NOT NULL, title TEXT NOT NULL,
+            responsible TEXT NOT NULL, schedule TEXT NOT NULL DEFAULT '', band TEXT NOT NULL DEFAULT 'all',
+            start_date TEXT NOT NULL, end_date TEXT NOT NULL, status TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'manual', notes TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS evidence (
             report_id TEXT PRIMARY KEY, content BLOB NOT NULL,
             FOREIGN KEY (report_id) REFERENCES reports(id));
@@ -146,3 +152,26 @@ def track(path, code):
             return None
         events = [dict(e) for e in con.execute('SELECT status,timestamp FROM history WHERE report_id=? ORDER BY id', (row['id'],))]
         return {**dict(row), 'history': events}
+
+
+def create_action(path, data):
+    stamp = now().isoformat()
+    with connect(path) as con:
+        cur = con.execute("INSERT INTO actions (zone,title,responsible,schedule,band,start_date,end_date,status,source,"
+                          "created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                          (data['zone'], data['title'], data['responsible'], data['schedule'], data['band'],
+                           data['start_date'], data['end_date'], data['status'], data['source'], stamp, stamp))
+        return dict(con.execute('SELECT * FROM actions WHERE id=?', (cur.lastrowid,)).fetchone())
+
+
+def all_actions(path):
+    with connect(path) as con:
+        return [dict(r) for r in con.execute('SELECT * FROM actions ORDER BY start_date DESC, id DESC')]
+
+
+def update_action(path, action_id, status, notes):
+    with connect(path) as con:
+        if not con.execute('SELECT id FROM actions WHERE id=?', (action_id,)).fetchone():
+            raise ValueError('Acción no encontrada.')
+        con.execute('UPDATE actions SET status=?, notes=?, updated_at=? WHERE id=?',
+                    (status, notes, now().isoformat(), action_id))

@@ -18,11 +18,13 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from analytics import (BOUNDS, CENTER, TYPES, STATUSES, VALUE_BANDS, now, parse_time, statistics, priority,
                        duplicate_candidates, harm, critical_reasons)
-from insights import enhanced_statistics, management_metrics
+from insights import enhanced_statistics, management_metrics, cell_info, cell_key
 from legal import LEGAL_CLASSES, FAMILIES, FORCES, CIRCUMSTANCES, classify, family as legal_family
 from evaluation import evaluate
 from ai_analysis import ai_available, analyze
-from store import init_db, all_reports, create_report, update_status, track, connect
+from store import (init_db, all_reports, create_report, update_status, track, connect,
+                   create_action, all_actions, update_action)
+import actions as action_rules
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / 'web'
@@ -213,6 +215,14 @@ class Handler(BaseHTTPRequestHandler):
                         evidence = {r[0] for r in con.execute('SELECT report_id FROM evidence')}
                     result = management_metrics(self.reports(query), histories, evidence, *self.filters(query))
                     return self.respond(200, result)
+                if path == '/api/admin/actions':
+                    today = now().date()
+                    rows = all_reports(self.server.db)
+                    zones = sorted({cell_info(cell_key(r))['name'] for r in rows if r['status'] in {'validado', 'cerrado'}},
+                                   key=lambda z: (z[6], int(z[7:])))
+                    return self.respond(200, {'actions': action_rules.with_evaluation(all_actions(self.server.db), rows, today),
+                                              'zones': zones, 'statuses': action_rules.ACTION_STATUSES,
+                                              'sources': action_rules.SOURCES, 'today': today.isoformat()})
                 if path == '/api/admin/session':
                     return self.respond(200, {'authenticated': True})
                 if path == '/api/admin/reports':
@@ -233,7 +243,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise APIError(404, 'No hay imagen para este reporte.')
             if path.startswith('/api/'):
                 raise APIError(404, 'Ruta no encontrada.')
-            routes = {'/', '/reportar', '/panel', '/gestion', '/seguimiento', '/gestion-datos', '/analisis', '/laboratorio', '/metodologia'}
+            routes = {'/', '/reportar', '/panel', '/gestion', '/seguimiento', '/gestion-datos', '/analisis', '/acciones', '/laboratorio', '/metodologia'}
             file = WEB / ('index.html' if path in routes else unquote(path).lstrip('/'))
             file = file.resolve()
             if WEB not in file.parents or not file.is_file():
@@ -284,8 +294,23 @@ class Handler(BaseHTTPRequestHandler):
                 query = {k: [str(data[k])] for k in ('days', 'subtype', 'band', 'family') if k in data}
                 days, subtype, band = self.filters(query)
                 fam = self.family_filter(query)
-                result = analyze(self.reports(query), days, subtype, band, fam, refresh=data.get('refresh') is True)
+                registered = action_rules.with_evaluation(all_actions(self.server.db), all_reports(self.server.db), now().date())
+                result = analyze(self.reports(query), days, subtype, band, fam, refresh=data.get('refresh') is True,
+                                 actions=registered)
                 return self.respond(200, result)
+            if path == '/api/admin/actions':
+                self.require_admin()
+                created = create_action(self.server.db, action_rules.validate(data, now().date()))
+                return self.respond(201, {'id': created['id']})
+            if path == '/api/admin/actions/update':
+                self.require_admin()
+                aid, status, notes = data.get('id'), data.get('status'), data.get('notes', '')
+                if type(aid) is not int or status not in action_rules.ACTION_STATUSES:
+                    raise ValueError('Acción o estado no válido.')
+                if not isinstance(notes, str) or len(notes) > 600:
+                    raise ValueError('La nota debe tener hasta 600 caracteres.')
+                update_action(self.server.db, aid, status, notes.strip())
+                return self.respond(200, {'ok': True})
             if path == '/api/admin/status':
                 self.require_admin()
                 rid, status, note = data.get('id'), data.get('status'), data.get('note', '')

@@ -54,6 +54,9 @@ En el móvil, `localhost` no es tu PC ni un servidor remoto. Durante desarrollo 
 | `POST /api/logout` | Sesión | Revoca la sesión actual. |
 | `GET /api/admin/reports` | Revisor | Reportes individuales, puntajes y posibles coincidencias. |
 | `POST /api/admin/status` | Revisor | Cambia estado, exige nota y, para duplicados, ID original. `legal_class` opcional confirma o corrige la figura legal. |
+| `GET /api/admin/actions` | Revisor | Acciones registradas con su evaluación (antes/durante, resto del área, veredicto) y zonas disponibles. |
+| `POST /api/admin/actions` | Revisor | Registra una acción: `zone`, `title`, `responsible`, opcionales `start_date`, `end_date`, `band`, `schedule`, `source`. |
+| `POST /api/admin/actions/update` | Revisor | Cambia `status` (`planificada`, `en_curso`, `finalizada`, `cancelada`) y `notes`. |
 | `POST /api/admin/ai-analysis` | Revisor | Mismos filtros en el cuerpo JSON (+ `refresh`). Devuelve `analysis` (resumen, zonas con acciones, patrones, limitaciones), `source` (`claude` o `reglas`), `context` enviado y `map_cells`. |
 | `GET /api/admin/evidence/ID` | Revisor | Sirve la imagen privada. |
 
@@ -95,7 +98,7 @@ Ejemplo de cuerpo de registro (reemplazar fecha/hora por una fecha pasada válid
 | --- | --- | --- |
 | Calidad y duplicados | Menos distorsión en las estadísticas. | Precisión/recall sobre pares de reportes etiquetados manualmente. |
 | Comparación temporal (ya implementada; falta validar con datos de campo) | Identificar cambios en los reportes. | Periodos comparables, tamaño de muestra y revisión del subregistro. |
-| Acciones preventivas registradas | Conectar la información con decisiones documentadas. | Relacionar zona/periodo, acción, responsable y seguimiento; no atribuir causalidad automáticamente. |
+| Acciones preventivas registradas (implementado en `/acciones`) | Conectar la información con decisiones documentadas. | Relacionar zona/periodo, acción, responsable y seguimiento; no atribuir causalidad automáticamente. |
 | Modo sin conexión | Facilitar el registro donde hay conectividad intermitente. | Cola local, reintentos, confirmación de recepción e idempotencia. |
 | Seguimiento y avisos | Dar visibilidad al proceso de revisión. | Entrega de notificaciones y comprensión del estado por participantes. |
 | Evaluación de usabilidad | Demostrar que la solución se puede utilizar. | Tiempo de registro, errores, tareas completadas y SUS con un protocolo definido. |
