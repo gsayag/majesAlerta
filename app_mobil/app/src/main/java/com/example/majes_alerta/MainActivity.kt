@@ -218,7 +218,7 @@ fun MainApp() {
                 ) {
                     CircularProgressIndicator(color = AppGreen)
                     Text(
-                        text = "Cargando tu demo…",
+                        text = "Cargando…",
                         fontSize = 12.sp,
                         color = AppMuted,
                         modifier = Modifier.padding(top = 8.dp)

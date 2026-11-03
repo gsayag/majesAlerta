@@ -128,13 +128,13 @@ fun OnboardingScreen(onEnter: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 Text(text = "◎", fontSize = 49.sp, color = AppLime)
                 Text(
-                    text = "Tu reporte.\nUna mirada\nal territorio.",
+                    text = "Majes Alerta\nReporte de robos\ny hurtos",
                     fontSize = 37.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
                 Text(
-                    text = "Registra un caso de prueba, adjunta evidencia y conoce el recorrido de la información.",
+                    text = "Registra un caso de prueba con ubicación y evidencia, y consulta su estado de revisión.",
                     color = Color(0xFFD3DFC7),
                     fontSize = 15.sp,
                     lineHeight = 24.sp
@@ -143,14 +143,14 @@ fun OnboardingScreen(onEnter: () -> Unit) {
         }
 
         Text(
-            text = "Demo móvil independiente",
+            text = "Demo conectado al servidor del proyecto",
             fontSize = 19.sp,
             fontWeight = FontWeight.Bold,
             color = AppInk
         )
 
         Text(
-            text = "Todo se guarda en este celular. No se envían reportes a la Policía, a Serenazgo ni a la landing.",
+            text = "Tus reportes se envían al servidor del demo para su revisión. Si no hay conexión, quedan guardados y se reenvían. No se envían a la Policía ni a Serenazgo.",
             fontSize = 14.sp,
             color = AppMuted,
             lineHeight = 22.sp
@@ -194,7 +194,7 @@ fun HomeScreen(
         )
 
         Text(
-            text = "Reportes que\norientan.",
+            text = "Reportes de\nrobos y hurtos",
             fontSize = 30.sp,
             fontWeight = FontWeight.Bold,
             color = AppInk,
@@ -202,7 +202,7 @@ fun HomeScreen(
         )
 
         Text(
-            text = "Un espacio para registrar, organizar y comprender información del territorio.",
+            text = "Registro de reportes ciudadanos y consulta de su estado.",
             fontSize = 14.sp,
             color = AppMuted,
             lineHeight = 22.sp
@@ -217,13 +217,13 @@ fun HomeScreen(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 Text(
-                    text = "DEMO ACADÉMICO · SOLO ROBOS",
+                    text = "DEMO ACADÉMICO · ROBOS Y HURTOS",
                     color = AppLime,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "¿Qué ocurrió?",
+                    text = "Nuevo reporte",
                     color = Color.White,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold
@@ -668,7 +668,7 @@ fun ReportScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "El lugar importa",
+                        text = "Ubicación del hecho",
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = AppInk
@@ -786,7 +786,7 @@ fun ReportScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Badge(text = "SIN CONEXIÓN A LA MUNICIPALIDAD")
+                    Badge(text = "SE ENVÍA AL SERVIDOR DEL DEMO")
 
                     Text(
                         text = currentDraft.type,
@@ -1046,7 +1046,7 @@ fun PanoramaScreen(reports: List<Report>) {
         )
 
         Text(
-            text = "Ilustra cómo se aprovecharán los reportes en la web. Solo incluye estados validados o cerrados de forma simulada.",
+            text = "Vista local de este celular. Solo incluye reportes validados o cerrados de forma simulada.",
             fontSize = 14.sp,
             color = AppMuted,
             lineHeight = 22.sp
@@ -1192,7 +1192,7 @@ fun SettingsScreen(
         )
 
         Text(
-            text = "Listo para crecer.",
+            text = "Información técnica",
             fontSize = 30.sp,
             fontWeight = FontWeight.Bold,
             color = AppInk,

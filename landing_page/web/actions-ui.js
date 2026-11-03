@@ -30,12 +30,12 @@ export async function renderActions(ui) {
   const {api, active, shell, title, map, toast} = ui;
   try {await api('/api/admin/session');} catch (e) {
     if (!active()) return; if (e.status !== 401) throw e;
-    $('#app').innerHTML = shell('/acciones', title('ÁREA PRIVADA', 'Seguimiento de acciones', 'Qué se hizo, dónde y si cambió algo.') + `<form id="actions-login" class="panel login-card"><h2>Acceso al demo</h2><p>Contraseña de demostración: <strong>MajesDemo2026!</strong></p><label class="field"><span>Contraseña</span><input name="password" type="password" required autocomplete="current-password"></label><div id="login-error" class="error" role="alert"></div><button class="btn">Ingresar</button></form>`);
+    $('#app').innerHTML = shell('/acciones', title('ÁREA PRIVADA', 'Seguimiento de acciones', 'Registro y evaluación de acciones preventivas.') + `<form id="actions-login" class="panel login-card"><h2>Acceso al demo</h2><p>Contraseña de demostración: <strong>MajesDemo2026!</strong></p><label class="field"><span>Contraseña</span><input name="password" type="password" required autocomplete="current-password"></label><div id="login-error" class="error" role="alert"></div><button class="btn">Ingresar</button></form>`);
     $('#actions-login').onsubmit = async ev => {ev.preventDefault(); const b = ev.target.querySelector('button'); b.disabled = true; try {await api('/api/login', {password: new FormData(ev.target).get('password')}); if (active()) renderActions(ui);} catch (err) {if (active()) {$('#login-error').textContent = err.message; b.disabled = false;}}};
     return;
   }
   const data = await api('/api/admin/actions'); if (!active()) return;
-  $('#app').innerHTML = shell('/acciones', title('ÁREA PRIVADA · SEGUIMIENTO', 'De la recomendación al resultado.', 'Registra las acciones preventivas y compara cada zona antes y durante la acción, frente al resto del área.', `<a href="/analisis" data-route class="btn secondary">Ver recomendaciones de la IA</a>`) +
+  $('#app').innerHTML = shell('/acciones', title('ÁREA PRIVADA', 'Seguimiento de acciones', 'Registro de acciones preventivas y comparación de cada zona antes y durante la acción, frente al resto del área.', `<a href="/analisis" data-route class="btn secondary">Ver recomendaciones de la IA</a>`) +
     `<div class="two-panels"><section class="panel"><div class="panel-head"><div><h2>Nueva acción</h2><p class="small muted">También puedes registrarla desde «Análisis con IA».</p></div></div><div class="panel-body"><form id="action-form">
       <label class="field"><span>Zona</span><select name="zone" required>${data.zones.map(z => `<option>${esc(z)}</option>`).join('')}</select></label>
       <label class="field"><span>Acción</span><input name="title" required minlength="6" maxlength="300" placeholder="Patrullaje mixto Serenazgo-PNP"></label>
